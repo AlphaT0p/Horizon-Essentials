@@ -22,7 +22,9 @@ use std::time::{Duration, Instant};
 
 use crate::game::essentials_config::{Config, Resolved};
 use crate::game::essentials_registry::{ModuleId, Modules};
-use crate::game::essentials_store::{self as store, Io, Loaded, Reply, Request, SaveTimer};
+use crate::game::essentials_store::{
+    self as store, Io, Loaded, ProfileName, Reply, Request, SaveTimer,
+};
 use crate::game::essentials_types::Action;
 
 /// At most this many messages waiting for the chat (the oldest ones are dropped).
@@ -48,11 +50,17 @@ pub struct State {
     pub modules: Modules,
     /// The ticks seen since loading.
     pub tick: u64,
+    /// The profiles on disk, sorted (the active one included), as last read or changed here.
+    pub profiles: Vec<String>,
     io: Option<Io>,
     /// The last save sent and the last one confirmed by the I/O thread.
     save_sent: u64,
     save_done: u64,
     reloading: bool,
+    /// The read in progress is a profile switch: the new profile is saved once read, which
+    /// makes it the active one on disk.
+    switching: bool,
+    deletes_pending: u32,
 }
 
 impl State {
@@ -69,10 +77,13 @@ impl State {
             messages: VecDeque::new(),
             modules: Modules::default(),
             tick: 0,
+            profiles: Vec::new(),
             io: None,
             save_sent: 0,
             save_done: 0,
             reloading: false,
+            switching: false,
+            deletes_pending: 0,
         }
     }
 
@@ -84,6 +95,7 @@ impl State {
                 if io
                     .send(Request::Load {
                         dir: dir.to_owned(),
+                        profile: None,
                     })
                     .is_ok() =>
             {
@@ -107,13 +119,22 @@ impl State {
     fn finish_load(&mut self, loaded: Loaded) {
         self.profile = loaded.profile;
         self.config = loaded.config;
+        self.profiles = loaded.profiles;
         for w in loaded.warnings {
             self.say(w);
         }
         self.loaded = true;
         self.changed();
         if std::mem::take(&mut self.reloading) {
-            self.say("configuration reloaded");
+            if std::mem::take(&mut self.switching) {
+                // Saved at once, not after the usual delay: `active` names it from now on.
+                self.timer.mark();
+                self.flush();
+                let profile = self.profile.clone();
+                self.say(format!("profile \"{profile}\" loaded"));
+            } else {
+                self.say("configuration reloaded");
+            }
         }
     }
 
@@ -128,7 +149,10 @@ impl State {
 
     /// A reply from the I/O thread is expected (read or write in progress).
     fn awaiting(&self) -> bool {
-        !self.loaded || self.reloading || self.save_done < self.save_sent
+        !self.loaded
+            || self.reloading
+            || self.save_done < self.save_sent
+            || self.deletes_pending > 0
     }
 
     /// Picks up the I/O thread's replies, without waiting. When nothing is expected
@@ -151,7 +175,24 @@ impl State {
                     self.say(format!("could not save ({e}): settings kept in memory"));
                 }
             }
+            Reply::Deleted { profile, error } => {
+                self.deletes_pending = self.deletes_pending.saturating_sub(1);
+                self.finish_delete(profile, error);
+            }
             Reply::Stopped => {}
+        }
+    }
+
+    fn finish_delete(&mut self, profile: String, error: Option<String>) {
+        match error {
+            None => self.say(format!("profile \"{profile}\" deleted")),
+            Some(e) => {
+                self.say(format!("could not delete profile \"{profile}\" ({e})"));
+                if !self.profiles.contains(&profile) {
+                    self.profiles.push(profile);
+                    self.profiles.sort();
+                }
+            }
         }
     }
 
@@ -161,9 +202,15 @@ impl State {
             self.say("configuration is loading, try again in a moment");
             return false;
         }
-        if action == Action::Reload {
-            self.reload();
-            return true;
+        match action {
+            Action::Reload => {
+                self.reload();
+                return true;
+            }
+            Action::SwitchProfile(name) => return self.switch_profile(name),
+            Action::CopyProfile(name) => return self.copy_profile(name),
+            Action::DeleteProfile(name) => return self.delete_profile(name),
+            _ => {}
         }
         if !self.config.apply(action) {
             return false;
@@ -177,19 +224,90 @@ impl State {
     /// handles requests in order: the write comes before the read). The current
     /// configuration stays displayed until the new one arrives.
     pub fn reload(&mut self) {
+        self.read(None);
+    }
+
+    /// Reads profile `profile` (the active one when None) after sending any pending change.
+    fn read(&mut self, profile: Option<String>) {
         self.flush();
         self.reloading = true;
-        let sent = self.io.as_ref().is_some_and(|io| {
-            io.send(Request::Load {
-                dir: self.dir.clone(),
-            })
-            .is_ok()
-        });
-        if !sent {
+        let request = Request::Load {
+            dir: self.dir.clone(),
+            profile,
+        };
+        let refused = match &self.io {
+            Some(io) => io.send(request).err(),
+            None => Some(request),
+        };
+        if let Some(Request::Load { profile, .. }) = refused {
             self.io = None;
-            let loaded = store::load(&self.dir);
+            let loaded = store::load_profile(&self.dir, profile.as_deref());
             self.finish_load(loaded);
         }
+    }
+
+    /// Plays profile `name` from now on: the current one is saved first, then `name` is read
+    /// (a profile with no file yet starts from the default configuration).
+    fn switch_profile(&mut self, name: ProfileName) -> bool {
+        if name.as_str() == self.profile {
+            return false;
+        }
+        self.switching = true;
+        self.read(Some(name.as_str().to_owned()));
+        true
+    }
+
+    /// A new profile `name` with the current configuration, played from now on. Refused when a
+    /// profile has that name already: a copy never overwrites one.
+    fn copy_profile(&mut self, name: ProfileName) -> bool {
+        let name = name.as_str();
+        if self.profiles.iter().any(|p| p == name) || name == self.profile {
+            self.say(format!("profile \"{name}\" already exists"));
+            return false;
+        }
+        self.flush();
+        self.profile = name.to_owned();
+        self.profiles.push(self.profile.clone());
+        self.profiles.sort();
+        self.changed();
+        // Saved at once, not after the usual delay: `active` names it from now on.
+        self.timer.mark();
+        self.flush();
+        true
+    }
+
+    /// Deletes profile `name`'s file. Refused for the active profile and for a name that is not
+    /// a profile.
+    fn delete_profile(&mut self, name: ProfileName) -> bool {
+        let name = name.as_str();
+        if name == self.profile {
+            self.say("the active profile can't be deleted: switch to another one first");
+            return false;
+        }
+        let Some(at) = self.profiles.iter().position(|p| p == name) else {
+            self.say(format!("no profile \"{name}\""));
+            return false;
+        };
+        self.profiles.remove(at);
+        let request = Request::Delete {
+            dir: self.dir.clone(),
+            profile: name.to_owned(),
+        };
+        let refused = match &self.io {
+            Some(io) => io.send(request).err(),
+            None => Some(request),
+        };
+        match refused {
+            None => self.deletes_pending += 1,
+            Some(_) => {
+                self.io = None;
+                let error = store::delete_profile(&self.dir, name)
+                    .err()
+                    .map(|e| e.to_string());
+                self.finish_delete(name.to_owned(), error);
+            }
+        }
+        true
     }
 
     fn changed(&mut self) {
@@ -257,7 +375,11 @@ impl State {
     /// True when nothing is waiting on the disk: configuration read (and read again
     /// if a reload is in progress) and saves confirmed.
     pub fn idle(&self) -> bool {
-        self.loaded && !self.reloading && !self.timer.pending() && self.save_done >= self.save_sent
+        self.loaded
+            && !self.reloading
+            && !self.timer.pending()
+            && self.save_done >= self.save_sent
+            && self.deletes_pending == 0
     }
 
     /// Waits until nothing is waiting on the disk (tests and benchmarks; never in game).
@@ -460,5 +582,88 @@ mod tests {
             with_loaded(|s| s.profile.clone()).is_some(),
             "loaded once, kept afterwards"
         );
+    }
+
+    fn name(text: &str) -> ProfileName {
+        ProfileName::new(text).unwrap()
+    }
+
+    #[test]
+    fn switching_to_a_new_profile_starts_from_defaults_and_keeps_the_old_one() {
+        let d = TempDir::new("state-switch");
+        let mut s = started(&d);
+        assert!(s.apply(Action::Set(ModuleId::Status, false)));
+        assert!(s.apply(Action::SwitchProfile(name("pvp"))));
+        assert!(s.wait_idle(WAIT));
+        assert_eq!(s.profile, "pvp");
+        assert!(
+            s.resolved.on[ModuleId::Status.index()],
+            "a new profile: defaults"
+        );
+        assert_eq!(s.profiles, ["default", "pvp"]);
+        // The change made in `default` was saved before the switch, and `pvp` is active.
+        assert!(
+            !store::load_profile(&d.0, Some("default"))
+                .config
+                .module(ModuleId::Status)
+                .on
+        );
+        assert_eq!(
+            store::load(&d.0).profile,
+            "pvp",
+            "the switch survives a restart"
+        );
+        // Back to `default`: its settings come back.
+        assert!(s.apply(Action::SwitchProfile(name("default"))));
+        assert!(s.wait_idle(WAIT));
+        assert!(!s.resolved.on[ModuleId::Status.index()]);
+        assert!(
+            !s.apply(Action::SwitchProfile(name("default"))),
+            "already active"
+        );
+    }
+
+    #[test]
+    fn copying_a_profile_never_overwrites_one() {
+        let d = TempDir::new("state-copy");
+        let mut s = started(&d);
+        s.apply(Action::Set(ModuleId::Status, false));
+        assert!(s.apply(Action::CopyProfile(name("pvp"))));
+        assert_eq!(s.profile, "pvp");
+        assert!(s.wait_idle(WAIT) && s.apply(Action::Reload) && s.wait_idle(WAIT));
+        assert!(
+            !s.resolved.on[ModuleId::Status.index()],
+            "the copy has the settings"
+        );
+        assert_eq!(store::load(&d.0).profile, "pvp");
+        while s.next_message().is_some() {}
+        assert!(!s.apply(Action::CopyProfile(name("default"))));
+        assert!(s.next_message().unwrap().contains("already exists"));
+        assert!(
+            !s.apply(Action::CopyProfile(name("pvp"))),
+            "nor the active one"
+        );
+    }
+
+    #[test]
+    fn deleting_a_profile() {
+        let d = TempDir::new("state-delete");
+        let mut s = started(&d);
+        s.apply(Action::CopyProfile(name("pvp")));
+        s.apply(Action::SwitchProfile(name("default")));
+        assert!(s.wait_idle(WAIT));
+        assert_eq!(s.profiles, ["default", "pvp"]);
+        while s.next_message().is_some() {}
+        assert!(
+            !s.apply(Action::DeleteProfile(name("default"))),
+            "the active one stays"
+        );
+        assert!(s.next_message().unwrap().contains("can't be deleted"));
+        assert!(!s.apply(Action::DeleteProfile(name("nope"))));
+        assert!(s.apply(Action::DeleteProfile(name("pvp"))));
+        assert!(s.wait_idle(WAIT));
+        assert_eq!(s.profiles, ["default"]);
+        assert!(!profile_path(&d.0, "pvp").exists());
+        assert!(profile_path(&d.0, "default").exists());
     }
 }

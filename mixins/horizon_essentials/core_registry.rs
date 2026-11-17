@@ -15,6 +15,29 @@ pub enum ModuleId {
     Status,
 }
 
+/// The menu's module categories, in tab order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Category {
+    /// Boxes drawn on the HUD.
+    Hud,
+    /// Combat helpers.
+    Pvp,
+    /// Everything else.
+    Utility,
+}
+
+impl Category {
+    pub const ALL: [Category; 3] = [Category::Hud, Category::Pvp, Category::Utility];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Category::Hud => "HUD",
+            Category::Pvp => "PvP",
+            Category::Utility => "Utility",
+        }
+    }
+}
+
 /// A module's descriptor: what the Core, the UI and the configuration know about it.
 #[derive(Clone, Copy, Debug)]
 pub struct Descriptor {
@@ -23,9 +46,25 @@ pub struct Descriptor {
     pub key: &'static str,
     pub name: &'static str,
     pub description: &'static str,
+    pub category: Category,
     pub default_on: bool,
     pub has_widget: bool,
     pub default_anchor: Anchor,
+}
+
+impl Descriptor {
+    /// Whether the menu shows it: in `category` (None: all) and with `query` in its name or
+    /// description, ignoring ASCII case (an empty query matches everything).
+    pub fn matches(&self, category: Option<Category>, query: &str) -> bool {
+        let found = |text: &str| {
+            query.is_empty()
+                || text
+                    .as_bytes()
+                    .windows(query.len())
+                    .any(|w| w.eq_ignore_ascii_case(query.as_bytes()))
+        };
+        category.is_none_or(|c| c == self.category) && (found(self.name) || found(self.description))
+    }
 }
 
 pub const MODULES: &[Descriptor] = &[Descriptor {
@@ -33,6 +72,7 @@ pub const MODULES: &[Descriptor] = &[Descriptor {
     key: "status",
     name: "Essentials Status",
     description: "A small box showing that the Core is running, with the active profile.",
+    category: Category::Hud,
     default_on: true,
     has_widget: true,
     default_anchor: Anchor::TopRight,
@@ -126,5 +166,30 @@ mod tests {
             assert_eq!(ModuleId::from_key(d.key), Some(d.id));
         }
         assert_eq!(ModuleId::from_key("unknown"), None);
+    }
+
+    #[test]
+    fn the_menu_filter_uses_category_and_search() {
+        let status = ModuleId::Status.descriptor();
+        assert!(status.matches(None, ""));
+        assert!(status.matches(Some(Category::Hud), ""));
+        assert!(!status.matches(Some(Category::Pvp), ""));
+        assert!(status.matches(None, "STATUS"), "case is ignored");
+        assert!(
+            status.matches(None, "active profile"),
+            "the description counts"
+        );
+        assert!(!status.matches(None, "keystrokes"));
+        assert!(
+            !status.matches(Some(Category::Pvp), "status"),
+            "both must match"
+        );
+    }
+
+    #[test]
+    fn every_category_has_a_label() {
+        for c in Category::ALL {
+            assert!(!c.label().is_empty());
+        }
     }
 }

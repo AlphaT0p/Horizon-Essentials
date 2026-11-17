@@ -119,6 +119,24 @@ impl Layout {
             scale: 100,
         }
     }
+
+    /// Within the limits the file accepts: `x` and `y` from 0 to 1 (0 when not a number),
+    /// `scale` from `SCALE_MIN` to `SCALE_MAX`. What a UI sends is never saved out of range.
+    pub fn sanitized(self) -> Layout {
+        let share = |v: f32| {
+            if v.is_finite() {
+                v.clamp(0.0, 1.0)
+            } else {
+                0.0
+            }
+        };
+        Layout {
+            x: share(self.x),
+            y: share(self.y),
+            scale: self.scale.clamp(SCALE_MIN, SCALE_MAX),
+            ..self
+        }
+    }
 }
 
 impl ModuleConfig {
@@ -194,7 +212,8 @@ impl Config {
     }
 
     /// Applies an action. True if the configuration changed.
-    /// `Reload` changes nothing here: the storage reads the disk again.
+    /// `Reload` and the profile actions change nothing here: the state reads, writes or
+    /// deletes the profile files.
     pub fn apply(&mut self, action: Action) -> bool {
         let before = self.clone();
         match action {
@@ -203,11 +222,15 @@ impl Config {
                 m.on = !m.on;
             }
             Action::Set(id, on) => self.module_mut(id).on = on,
+            Action::SetLayout(id, layout) => self.module_mut(id).layout = layout.sanitized(),
             Action::ResetModule(id) => {
                 *self.module_mut(id) = ModuleConfig::default_for(id.descriptor())
             }
             Action::ResetAll => *self = Config::default(),
-            Action::Reload => {}
+            Action::Reload
+            | Action::SwitchProfile(_)
+            | Action::CopyProfile(_)
+            | Action::DeleteProfile(_) => {}
         }
         *self != before
     }
@@ -497,5 +520,30 @@ mod tests {
             r.active_count(),
             MODULES.iter().filter(|d| d.default_on).count()
         );
+    }
+
+    #[test]
+    fn set_layout_keeps_the_layout_in_range() {
+        let mut c = Config::default();
+        let id = ModuleId::Status;
+        let moved = Layout {
+            anchor: Anchor::Center,
+            auto: false,
+            x: 0.25,
+            y: f32::NAN,
+            scale: 900,
+        };
+        assert!(c.apply(Action::SetLayout(id, moved)));
+        let l = c.module(id).layout;
+        assert_eq!((l.anchor, l.auto, l.x), (Anchor::Center, false, 0.25));
+        assert_eq!(l.y, 0.0, "not a number: 0");
+        assert_eq!(l.scale, SCALE_MAX);
+        assert!(
+            !c.apply(Action::SetLayout(id, l)),
+            "the same layout again: no change"
+        );
+        let (back, warnings) = Config::parse(&c.to_json());
+        assert_eq!(back, c, "a moved widget survives a save");
+        assert!(warnings.is_empty(), "{warnings:?}");
     }
 }

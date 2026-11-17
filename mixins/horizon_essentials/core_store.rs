@@ -32,6 +32,8 @@ pub struct Loaded {
     pub profile: String,
     pub config: Config,
     pub warnings: Vec<String>,
+    /// The names of the profiles on disk, sorted (the loaded one included).
+    pub profiles: Vec<String>,
 }
 
 /// A profile name that is safe as a file name: 1 to 32 characters `a-z`, `0-9`, `_`, `-`.
@@ -42,27 +44,87 @@ pub fn valid_profile_name(name: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
 }
 
+/// A valid profile name, kept by value so that an `Action` stays `Copy`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct ProfileName {
+    len: u8,
+    bytes: [u8; 32],
+}
+
+impl ProfileName {
+    /// None when `name` is not a valid profile name.
+    pub fn new(name: &str) -> Option<ProfileName> {
+        if !valid_profile_name(name) {
+            return None;
+        }
+        let mut bytes = [0; 32];
+        bytes[..name.len()].copy_from_slice(name.as_bytes());
+        Some(ProfileName {
+            len: name.len() as u8,
+            bytes,
+        })
+    }
+
+    pub fn as_str(&self) -> &str {
+        // Valid names are ASCII.
+        std::str::from_utf8(&self.bytes[..usize::from(self.len)]).unwrap_or_default()
+    }
+}
+
+impl std::fmt::Debug for ProfileName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.as_str())
+    }
+}
+
 pub fn profile_path(dir: &Path, profile: &str) -> PathBuf {
     dir.join("profiles").join(format!("{profile}.json"))
 }
 
+/// The profiles on disk: the valid names of `profiles/*.json`, sorted.
+fn list_profiles(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(dir.join("profiles"))
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter_map(|e| {
+                    let name = e.file_name().to_string_lossy().into_owned();
+                    let stem = name.strip_suffix(".json")?;
+                    valid_profile_name(stem).then(|| stem.to_owned())
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    names.sort();
+    names
+}
+
 /// Reads the active profile. Never panics and always returns a valid configuration.
 pub fn load(dir: &Path) -> Loaded {
+    load_profile(dir, None)
+}
+
+/// Reads profile `wanted`, or the active one when None. A profile with no file yet gives the
+/// default configuration (it is created at its first save).
+pub fn load_profile(dir: &Path, wanted: Option<&str>) -> Loaded {
     count_disk_op();
     let mut warnings = Vec::new();
-    let profile = match fs::read_to_string(dir.join("active")) {
-        Ok(text) => {
-            let name = text.trim();
-            if valid_profile_name(name) {
-                name.to_owned()
-            } else {
-                warnings.push(format!(
-                    "invalid active profile ({name:?}): using profile \"{DEFAULT_PROFILE}\""
-                ));
-                DEFAULT_PROFILE.to_owned()
+    let profile = match wanted {
+        Some(name) => name.to_owned(),
+        None => match fs::read_to_string(dir.join("active")) {
+            Ok(text) => {
+                let name = text.trim();
+                if valid_profile_name(name) {
+                    name.to_owned()
+                } else {
+                    warnings.push(format!(
+                        "invalid active profile ({name:?}): using profile \"{DEFAULT_PROFILE}\""
+                    ));
+                    DEFAULT_PROFILE.to_owned()
+                }
             }
-        }
-        Err(_) => DEFAULT_PROFILE.to_owned(),
+            Err(_) => DEFAULT_PROFILE.to_owned(),
+        },
     };
     let path = profile_path(dir, &profile);
     let config = match fs::read_to_string(&path) {
@@ -86,11 +148,36 @@ pub fn load(dir: &Path) -> Loaded {
             Config::default()
         }
     };
+    let mut profiles = list_profiles(dir);
+    if !profiles.contains(&profile) {
+        profiles.push(profile.clone());
+        profiles.sort();
+    }
     Loaded {
         profile,
         config,
         warnings,
+        profiles,
     }
+}
+
+/// Deletes profile `profile`'s file (its `.bak` copy, if any, stays). Refused for the active
+/// profile, so `active` never names a missing file.
+pub fn delete_profile(dir: &Path, profile: &str) -> io::Result<()> {
+    count_disk_op();
+    if !valid_profile_name(profile) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "invalid profile name",
+        ));
+    }
+    if fs::read_to_string(dir.join("active")).is_ok_and(|a| a.trim() == profile) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "it is the active profile",
+        ));
+    }
+    fs::remove_file(profile_path(dir, profile))
 }
 
 /// Writes the profile, and `active` if it changed.
@@ -174,14 +261,20 @@ impl SaveTimer {
 /// A request to the I/O thread.
 #[derive(Debug)]
 pub enum Request {
+    /// Reads `profile`, or the active profile when None.
     Load {
         dir: PathBuf,
+        profile: Option<String>,
     },
     Save {
         dir: PathBuf,
         profile: String,
         json: String,
         seq: u64,
+    },
+    Delete {
+        dir: PathBuf,
+        profile: String,
     },
     Stop,
 }
@@ -190,7 +283,14 @@ pub enum Request {
 #[derive(Debug)]
 pub enum Reply {
     Loaded(Loaded),
-    Saved { seq: u64, error: Option<String> },
+    Saved {
+        seq: u64,
+        error: Option<String>,
+    },
+    Deleted {
+        profile: String,
+        error: Option<String>,
+    },
     Stopped,
 }
 
@@ -272,16 +372,33 @@ fn worker(requests: Receiver<Request>, replies: Sender<Reply>) {
                     let _ = replies.send(Reply::Stopped);
                     return;
                 }
-                Request::Load { dir } => {
-                    let loaded =
-                        catch_unwind(AssertUnwindSafe(|| load(dir))).unwrap_or_else(|_| Loaded {
-                            profile: DEFAULT_PROFILE.to_owned(),
-                            config: Config::default(),
-                            warnings: vec![
-                                "internal error while reading: default values".to_owned(),
-                            ],
+                Request::Load { dir, profile } => {
+                    let wanted = profile.as_deref();
+                    let loaded = catch_unwind(AssertUnwindSafe(|| load_profile(dir, wanted)))
+                        .unwrap_or_else(|_| {
+                            let profile = wanted.unwrap_or(DEFAULT_PROFILE).to_owned();
+                            Loaded {
+                                profiles: vec![profile.clone()],
+                                profile,
+                                config: Config::default(),
+                                warnings: vec![
+                                    "internal error while reading: default values".to_owned(),
+                                ],
+                            }
                         });
                     Reply::Loaded(loaded)
+                }
+                Request::Delete { dir, profile } => {
+                    let error =
+                        match catch_unwind(AssertUnwindSafe(|| delete_profile(dir, profile))) {
+                            Ok(Ok(())) => None,
+                            Ok(Err(e)) => Some(e.to_string()),
+                            Err(_) => Some("internal error while deleting".to_owned()),
+                        };
+                    Reply::Deleted {
+                        profile: profile.clone(),
+                        error,
+                    }
                 }
                 Request::Save {
                     dir,
@@ -313,11 +430,11 @@ fn worker(requests: Receiver<Request>, replies: Sender<Reply>) {
     }
 }
 
-/// A newer save of the same profile follows, with no load in between.
+/// A newer save of the same profile follows, with no load or deletion in between.
 fn superseded(later: &[Request], dir: &Path, profile: &str) -> bool {
     for r in later {
         match r {
-            Request::Load { .. } | Request::Stop => return false,
+            Request::Load { .. } | Request::Delete { .. } | Request::Stop => return false,
             Request::Save {
                 dir: d, profile: p, ..
             } if d == dir && p == profile => return true,
@@ -435,7 +552,13 @@ pub(crate) mod tests {
             assert!(io.send(save).is_ok());
         }
         // A read after the writes sees the last one (order is kept).
-        assert!(io.send(Request::Load { dir: d.0.clone() }).is_ok());
+        assert!(
+            io.send(Request::Load {
+                dir: d.0.clone(),
+                profile: None
+            })
+            .is_ok()
+        );
         let replies = io.finish(Duration::from_secs(5));
         let saved = replies
             .iter()
@@ -463,6 +586,7 @@ pub(crate) mod tests {
         };
         let load = Request::Load {
             dir: PathBuf::from("d"),
+            profile: None,
         };
         let d = Path::new("d");
         assert!(superseded(&[save("default")], d, "default"));
@@ -505,5 +629,58 @@ pub(crate) mod tests {
         assert!(t.advance(500.0));
         t.done();
         assert!(!t.pending());
+    }
+
+    #[test]
+    fn profile_names_are_checked_once_and_copied_by_value() {
+        let name = ProfileName::new("pvp_2").unwrap();
+        assert_eq!(name.as_str(), "pvp_2");
+        let copy = name;
+        assert_eq!(copy, name);
+        assert!(ProfileName::new("").is_none());
+        assert!(ProfileName::new("Uppercase").is_none());
+        assert!(ProfileName::new("../x").is_none());
+        assert!(ProfileName::new(&"a".repeat(33)).is_none());
+        assert_eq!(
+            ProfileName::new(&"a".repeat(32)).unwrap().as_str().len(),
+            32
+        );
+    }
+
+    #[test]
+    fn loading_lists_the_profiles_and_reads_the_one_asked_for() {
+        let d = TempDir::new("profiles");
+        let mut pvp = Config::default();
+        pvp.apply(Action::Toggle(ModuleId::Status));
+        save(&d.0, "pvp", &pvp).unwrap();
+        save(&d.0, "default", &Config::default()).unwrap();
+        fs::write(d.0.join("profiles").join("Bad Name.json"), "{}").unwrap();
+        let l = load_profile(&d.0, Some("pvp"));
+        assert_eq!((l.profile.as_str(), &l.config), ("pvp", &pvp));
+        assert_eq!(
+            l.profiles,
+            ["default", "pvp"],
+            "invalid names are not profiles"
+        );
+        let new = load_profile(&d.0, Some("new"));
+        assert_eq!(new.config, Config::default(), "no file yet: the defaults");
+        assert_eq!(new.profiles, ["default", "new", "pvp"]);
+        assert!(new.warnings.is_empty());
+    }
+
+    #[test]
+    fn deleting_a_profile_spares_the_active_one() {
+        let d = TempDir::new("delete");
+        save(&d.0, "pvp", &Config::default()).unwrap();
+        save(&d.0, "default", &Config::default()).unwrap(); // `default` is active now
+        assert!(delete_profile(&d.0, "default").is_err());
+        assert!(profile_path(&d.0, "default").exists());
+        delete_profile(&d.0, "pvp").unwrap();
+        assert!(!profile_path(&d.0, "pvp").exists());
+        assert!(delete_profile(&d.0, "pvp").is_err(), "already gone");
+        assert!(
+            delete_profile(&d.0, "../active").is_err(),
+            "never outside profiles/"
+        );
     }
 }

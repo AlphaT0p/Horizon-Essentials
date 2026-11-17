@@ -3,8 +3,9 @@
 // of the test harness (harness/lib.rs). No `//!` and no inner attributes: the
 // horizon-mixins bundle format rejects them.
 
-use crate::game::essentials_config::ResolvedStyle;
+use crate::game::essentials_config::{Layout, ResolvedStyle};
 use crate::game::essentials_registry::ModuleId;
+use crate::game::essentials_store::ProfileName;
 
 /// The mod id: its entry in Options > Mods and its data folder
 /// (horizon-mods/.horizon-mod-data/horizon_essentials/).
@@ -99,16 +100,24 @@ impl Anchor {
 
 // ── Actions: the only way for the UI to change the configuration ─────────
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Action {
     Toggle(ModuleId),
     Set(ModuleId, bool),
+    /// A module widget's new placement (the HUD Editor sends one when a drag ends).
+    SetLayout(ModuleId, Layout),
     /// Restores a module's default settings (enabled state, placement, style).
     ResetModule(ModuleId),
     /// Restores the whole default configuration.
     ResetAll,
     /// Reads the configuration from disk again.
     Reload,
+    /// Plays another profile; one with no file yet starts from the defaults.
+    SwitchProfile(ProfileName),
+    /// A new profile with the current settings, played from now on (never overwrites one).
+    CopyProfile(ProfileName),
+    /// Deletes a profile other than the active one.
+    DeleteProfile(ProfileName),
 }
 
 // ── Rendering: a list of shapes reused from one frame to the next ──────────

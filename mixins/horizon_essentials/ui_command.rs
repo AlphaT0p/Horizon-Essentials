@@ -157,8 +157,12 @@ pub fn outcome(action: Action, changed: bool, resolved: &Resolved) -> String {
         }
         Action::ResetModule(id) => format!("{}: default settings", id.descriptor().name),
         Action::ResetAll => "All settings reset to defaults".to_owned(),
-        // `reload` writes "configuration reloaded" itself.
-        Action::Reload => String::new(),
+        Action::SetLayout(id, _) => format!("{}: moved", id.descriptor().name),
+        // The state writes its own message for these.
+        Action::Reload
+        | Action::SwitchProfile(_)
+        | Action::CopyProfile(_)
+        | Action::DeleteProfile(_) => String::new(),
     }
 }
 
