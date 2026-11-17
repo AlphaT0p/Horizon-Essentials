@@ -78,11 +78,13 @@ pub struct Resolved {
     pub on: [bool; COUNT],
     pub layout: [Layout; COUNT],
     pub style: [ResolvedStyle; COUNT],
+    /// Le nombre de modules actifs, compté une fois à chaque changement.
+    active: usize,
 }
 
 impl Resolved {
     pub fn active_count(&self) -> usize {
-        self.on.iter().filter(|on| **on).count()
+        self.active
     }
 }
 
@@ -156,6 +158,7 @@ impl Config {
             on: [false; COUNT],
             layout: [first.layout; COUNT],
             style: [first.style.resolve(); COUNT],
+            active: 0,
         };
         for id in ModuleId::all() {
             let m = self.module(id);
@@ -163,6 +166,7 @@ impl Config {
             r.layout[id.index()] = m.layout;
             r.style[id.index()] = m.style.resolve();
         }
+        r.active = r.on.iter().filter(|on| **on).count();
         r
     }
 
