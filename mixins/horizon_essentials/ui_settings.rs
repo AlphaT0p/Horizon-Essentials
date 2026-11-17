@@ -6,16 +6,47 @@
 // an `Action`, which the Core applies. Modules come from the registry: a module
 // added to the registry gets its button without changing anything here.
 // "Reset everything" asks for a second click to confirm.
+//
+// Horizon asks every native mod for its page when it builds Options > Mods,
+// even when the mod is disabled there. `page` and `press` take that switch
+// first: while the mod is off, the Core is never started (no I/O thread, no
+// configuration read) and a click does nothing.
 
 use std::cell::Cell;
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use crate::game::essentials_events::Snapshot;
+use crate::game::essentials_events::{self as ev, Snapshot};
 use crate::game::essentials_registry::{MODULES, ModuleId};
 use crate::game::essentials_types::Action;
 
 /// The page's only label while the configuration is loading.
 pub const LOADING: &str = "Loading the configuration…";
+/// The page's only label while the mod is disabled in Options > Mods.
+pub const MOD_OFF: &str = "Enable Horizon Essentials in Options > Mods to manage its modules";
+
+/// The page for `native_settings`. `mod_on` is the mod's switch in
+/// Options > Mods; `dir` gives the data folder, and is only asked when the
+/// mod is on (it may start the Core).
+pub fn page(mod_on: bool, dir: impl FnOnce() -> PathBuf, out: &mut Vec<String>) {
+    if !mod_on {
+        out.push(MOD_OFF.to_owned());
+        return;
+    }
+    ev::view(dir, |snapshot| labels(snapshot, out));
+}
+
+/// A click for `native_settings_click`: turned into an `Action` that the Core
+/// applies. Nothing happens while the mod is off, or while loading.
+pub fn press(mod_on: bool, dir: impl Fn() -> PathBuf, index: usize) {
+    if !mod_on {
+        return;
+    }
+    let loaded = ev::view(&dir, |snapshot| snapshot.is_some()).unwrap_or(false);
+    if let Some(action) = click(index, loaded) {
+        ev::apply(&dir, action);
+    }
+}
 
 /// A button of the page, in display order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

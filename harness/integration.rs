@@ -1,7 +1,7 @@
 //! Integration tests: the settings page, the /essentials command and the Core
 //! together, as the `h_settings`, `h_click` and `h_command` helpers connect them
 //! in the game (those helpers call the game and are not compiled here: the
-//! functions below reproduce exactly the same sequence).
+//! functions below make the same calls, `native_on` being the `mod_on` argument).
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -39,22 +39,16 @@ fn start(dir: &Path) {
     assert_eq!(state::with_existing(|s| s.wait_idle(WAIT)), Some(true));
 }
 
-/// h_settings: the page labels.
+/// h_settings with the mod enabled in Options > Mods: the page labels.
 fn page_labels(dir: &Path) -> Vec<String> {
     let mut out = Vec::new();
-    ev::view(
-        || dir.to_path_buf(),
-        |snapshot| page::labels(snapshot, &mut out),
-    );
+    page::page(true, || dir.to_path_buf(), &mut out);
     out
 }
 
-/// h_click: a click on the page.
+/// h_click with the mod enabled in Options > Mods: a click on the page.
 fn page_click(dir: &Path, button: usize) {
-    let loaded = ev::view(|| dir.to_path_buf(), |s| s.is_some()).unwrap_or(false);
-    if let Some(action) = page::click(button, loaded) {
-        ev::apply(|| dir.to_path_buf(), action);
-    }
+    page::press(true, || dir.to_path_buf(), button);
 }
 
 /// h_command: /essentials <args>, and the lines written in the chat.
@@ -310,4 +304,87 @@ fn every_registry_module_is_listed_by_the_page_and_the_command() {
         assert!(lines[i].starts_with(desc.key), "list: {}", lines[i]);
         assert!(lines[i].contains(desc.description));
     }
+}
+
+/// A data folder that must never be asked for: asking for it is what starts
+/// the Core (I/O thread, configuration read).
+fn never(dir: &Path) -> impl Fn() -> PathBuf + '_ {
+    move || panic!("the data folder was asked for: {}", dir.display())
+}
+
+#[test]
+fn a_disabled_mod_never_starts_the_core() {
+    let d = Dir::new("mod-off");
+    let dir = d.0.clone();
+    // A fresh thread has no Core yet, like the game before the mod is enabled.
+    std::thread::spawn(move || {
+        let mut labels = Vec::new();
+        page::page(false, never(&dir), &mut labels);
+        assert_eq!(labels, [page::MOD_OFF], "one label, nothing else");
+        let reset = MODULES.len() + 1;
+        for button in [0, MODULES.len(), reset, reset, 99] {
+            page::press(false, never(&dir), button);
+        }
+        // The Core and its I/O thread only exist once `State::start` ran.
+        assert!(
+            state::with_existing(|_| ()).is_none(),
+            "no Core, so no I/O thread and no configuration read"
+        );
+        assert_eq!(
+            std::fs::read_dir(&dir).unwrap().count(),
+            0,
+            "nothing written to the data folder"
+        );
+    })
+    .join()
+    .unwrap();
+}
+
+#[test]
+fn a_click_while_the_mod_is_disabled_changes_nothing() {
+    let d = Dir::new("mod-off-click");
+    start(&d.0);
+    let config = || state::with_existing(|s| s.config.clone()).unwrap();
+    let revision = || state::with_existing(|s| s.revision).unwrap();
+    let before = config();
+    let reset = MODULES.len() + 1;
+    // Each click on its own, checked on its own.
+    page::press(false, never(&d.0), 0);
+    assert!(status_on(&d.0), "the module button did not toggle");
+    page::press(false, never(&d.0), reset);
+    assert_eq!(
+        page_labels(&d.0)[reset],
+        "Reset everything",
+        "the reset button did not arm the confirmation"
+    );
+    let revision_before = revision();
+    page::press(false, never(&d.0), MODULES.len());
+    assert!(
+        state::with_existing(|s| s.idle()).unwrap(),
+        "the reload button did not start a read"
+    );
+    assert_eq!(revision(), revision_before);
+    assert_eq!(config(), before);
+}
+
+#[test]
+fn the_enabled_page_is_unchanged() {
+    let d = Dir::new("mod-on");
+    start(&d.0);
+    let mut direct = Vec::new();
+    ev::view(
+        || d.0.clone(),
+        |snapshot| page::labels(snapshot, &mut direct),
+    );
+    assert_eq!(page_labels(&d.0), direct);
+    assert_eq!(
+        direct,
+        [
+            "Essentials Status: ON",
+            "Reload configuration",
+            "Reset everything"
+        ]
+    );
+    page_click(&d.0, 0);
+    assert!(!status_on(&d.0), "a click still toggles the module");
 }
