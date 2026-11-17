@@ -40,6 +40,29 @@ Commit 4 (`1e4d857`) contre la branche `perf/io-thread`, 3 passes alternées, m�
 
 À 1 250 FPS une frame dure 800 µs : notre code en prend moins de 0,01 %.
 
+## Démarrage mesuré (17/11, instance Essentials Dev, même machine)
+
+Commande `horizon-launcher play --instance essentials-dev`, du lancement de la commande jusqu'à la
+ligne « first frame after » du journal (menu principal) ; mémoire relevée 2 s après « rest-ready » ;
+fermeture propre par la fenêtre.
+
+| Build | Lancement | Play → processus | Play → menu | Mémoire (working set / privée) |
+|---|---|---|---|---|
+| Nightly classique | 2e | 5,5 s | **7,4 s** | 552 / 965 Mo |
+| Natif sans Essentials (fps-overlay officiel) | 2e | 6,0 s | 13,5 s ¹ | 916 / 1 144 Mo |
+| Essentials commit 4 | 2e | 5,5 s | **7,4 s** | 895 / 1 129 Mo |
+| Essentials `perf/io-thread` | 1er (cache reconstruit) | 18,1 s | 60,2 s | 963 / 2 295 Mo |
+| Essentials `perf/io-thread` | 2e / 3e | 5,9 / 5,7 s | 14,2 ¹ / **7,7 s** | 963-1 026 / 1 410-1 657 Mo |
+
+¹ Attente de 5,7-6,2 s dans la phase « first frame after » de Horizon, vue avec et sans Essentials.
+
+- À chaud, un build avec Essentials démarre comme Horizon classique (7,4-7,7 s, dont ~5,5 s de
+  préparation par le launcher avant le démarrage du jeu).
+- Le premier lancement d'un nouveau build (≈ 60 s) et le passage d'une version à une autre dans la
+  même instance (≈ 18 s, le launcher recopie les fichiers du jeu) relèvent du launcher.
+- Un build natif occupe ~350 Mo de plus qu'une Nightly, **avec ou sans Essentials** : c'est la
+  compilation native du launcher (profil `fast`, binaire de 147 Mo contre 107 Mo), pas notre code.
+
 ## Démarrage du jeu
 
 Mesuré dans les journaux du jeu (`logs/latest.log`) et les rapports du launcher (`benchmarks/`).
