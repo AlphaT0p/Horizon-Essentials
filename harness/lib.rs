@@ -14,4 +14,8 @@ pub mod game {
     pub mod essentials_registry;
     #[path = "../../mixins/horizon_essentials/core_config.rs"]
     pub mod essentials_config;
+    #[path = "../../mixins/horizon_essentials/core_store.rs"]
+    pub mod essentials_store;
+    #[path = "../../mixins/horizon_essentials/core_state.rs"]
+    pub mod essentials_state;
 }
