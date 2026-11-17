@@ -1,6 +1,6 @@
-// Fermeture du jeu (une fois, avant la sauvegarde finale) : le dernier changement
-// de configuration est écrit et le thread d'E/S est attendu (au plus 2 s).
-// Pas de test `native_on` : un changement fait avant de couper le mod doit être gardé.
+// Game shutdown (once, before the final save): the last configuration change is
+// written and the I/O thread is waited for (2 s at most).
+// No `native_on` check: a change made before turning the mod off must be kept.
 fn essentials_stopping(game: &crate::game::Game<'_>) {
     if !game.native_window() {
         return;

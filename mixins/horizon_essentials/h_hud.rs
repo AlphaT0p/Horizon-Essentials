@@ -1,6 +1,6 @@
-// Le HUD (pas sous F1) : le Core choisit quoi dessiner et où ; ce helper ne fait
-// que traduire en appels au jeu. Aucune lecture disque, aucune allocation une
-// fois les formes des widgets construites.
+// The HUD (hidden by F1): the Core decides what to draw and where; this helper only
+// translates that into game calls. No disk reads and no allocations once the
+// widget shapes are built.
 fn essentials_hud(
     game: &mut crate::game::Game<'_>,
     batch: &mut horizon_client::hud::HudBatch,
@@ -20,7 +20,7 @@ fn essentials_hud(
         _ => Corner::BottomRight,
     };
     let mut place = |i: usize, w: f32, h: f32| {
-        // F3 prend les coins du haut, comme pour les boîtes de Horizon.
+        // F3 takes the top corners, as it does for Horizon's own boxes.
         if !game.native_corner_shown(corner(i)) {
             return None;
         }

@@ -1,13 +1,13 @@
-// Protocole de mesure, identique avant et aprÃ¨s l'optimisation.
-// N'utilise que l'API publique stable des Ã©vÃ©nements : frame, hud, tick, apply.
+// Measurement protocol, identical before and after the optimization.
+// Only uses the stable public event API: frame, hud, tick, apply.
 //
-// P1 : frame + HUD en rÃ©gime Ã©tabli (2 000 000 frames) : ns et allocations par frame,
-//      tÃ©moin actif puis dÃ©sactivÃ©.
-// P2 : tick en rÃ©gime Ã©tabli : ns et allocations par tick.
-// P3 : changement de config puis frames de 1 ms jusqu'Ã  ce que le fichier soit Ã©crit :
-//      durÃ©e de la PIRE frame (c'est elle qui portait l'Ã©criture disque). 20 rÃ©pÃ©titions.
-// P4 : premiÃ¨re frame d'un thread neuf, avec un fichier de config prÃ©sent (chargement) :
-//      durÃ©e de cette frame. 20 rÃ©pÃ©titions.
+// P1: frame + HUD in steady state (2,000,000 frames): ns and allocations per frame,
+//     status module enabled, then disabled.
+// P2: tick in steady state: ns and allocations per tick.
+// P3: config change, then 1 ms frames until the file is written:
+//     duration of the WORST frame (the one that carried the disk write). 20 runs.
+// P4: first frame of a fresh thread, with an existing config file (loading):
+//     duration of that frame. 20 runs.
 
 use crate::allocs;
 use crate::game::{essentials_events as ev, essentials_registry::ModuleId, essentials_types::Action};
@@ -39,7 +39,7 @@ fn median(mut v: Vec<f64>) -> f64 {
 pub fn run() {
     let d = dir("p1");
     let mut sink = 0;
-    // Chauffe : chargement fini (y compris s'il est asynchrone), formes construites.
+    // Warm-up: loading done (even if asynchronous), shapes built.
     let t = Instant::now();
     while t.elapsed() < Duration::from_millis(300) {
         frame_and_hud(&d, &mut sink);
@@ -55,7 +55,7 @@ pub fn run() {
     };
     let (on_ns, on_allocs) = measure(&mut sink);
     assert!(ev::apply(|| d.clone(), Action::Set(ModuleId::Status, false)));
-    // Laisse passer la sauvegarde de ce changement avant de mesurer.
+    // Let the save of this change happen before measuring.
     let t = Instant::now();
     while t.elapsed() < Duration::from_millis(1500) {
         frame_and_hud(&d, &mut sink);
@@ -85,7 +85,7 @@ pub fn run() {
             if now != before && !now.is_empty() {
                 break;
             }
-            assert!(start.elapsed() < Duration::from_secs(10), "pas sauvegardÃ© (essai {i})");
+            assert!(start.elapsed() < Duration::from_secs(10), "not saved (run {i})");
             std::thread::sleep(Duration::from_micros(200));
         }
         worst.push(max.as_secs_f64() * 1e6);
@@ -105,16 +105,16 @@ pub fn run() {
         first.push(us);
     }
 
-    println!("PROTOCOLE P1 frame+HUD tÃ©moin actif     : {on_ns:.1} ns/frame, {on_allocs} alloc/frame");
-    println!("PROTOCOLE P1 frame+HUD tÃ©moin dÃ©sactivÃ© : {off_ns:.1} ns/frame, {off_allocs} alloc/frame");
-    println!("PROTOCOLE P2 tick                       : {tick_ns:.1} ns/tick, {tick_allocs} alloc/tick");
+    println!("PROTOCOL P1 frame+HUD status enabled  : {on_ns:.1} ns/frame, {on_allocs} alloc/frame");
+    println!("PROTOCOL P1 frame+HUD status disabled : {off_ns:.1} ns/frame, {off_allocs} alloc/frame");
+    println!("PROTOCOL P2 tick                      : {tick_ns:.1} ns/tick, {tick_allocs} alloc/tick");
     println!(
-        "PROTOCOLE P3 pire frame pendant une sauvegarde : mÃ©diane {:.0} Âµs, max {:.0} Âµs",
+        "PROTOCOL P3 worst frame during a save : median {:.0} µs, max {:.0} µs",
         median(worst.clone()),
         worst.iter().cloned().fold(0.0, f64::max)
     );
     println!(
-        "PROTOCOLE P4 premiÃ¨re frame (chargement)       : mÃ©diane {:.0} Âµs, max {:.0} Âµs",
+        "PROTOCOL P4 first frame (loading)     : median {:.0} µs, max {:.0} µs",
         median(first.clone()),
         first.iter().cloned().fold(0.0, f64::max)
     );

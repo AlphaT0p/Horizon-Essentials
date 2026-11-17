@@ -1,25 +1,25 @@
-// Horizon Essentials : le registre statique des modules (crate::game::essentials_registry).
+// Horizon Essentials: the static module registry (crate::game::essentials_registry).
 //
-// Ajouter un module, c'est :
-//   1. écrire son fichier mod_<nom>.rs (et l'ajouter à horizon-mixin.toml et harness/lib.rs) ;
-//   2. ajouter une variante à `ModuleId` et une ligne à `MODULES` ci-dessous ;
-//   3. ajouter son champ à `Modules` et une branche à `Modules::get_mut` (dans ce même fichier).
-// Le reste du Core, le menu, la configuration et les profils le prennent en compte seuls.
+// Adding a module means:
+//   1. writing its mod_<name>.rs file (and adding it to horizon-mixin.toml and harness/lib.rs);
+//   2. adding a `ModuleId` variant and a `MODULES` row below;
+//   3. adding its field to `Modules` and a branch to `Modules::get_mut` (in this same file).
+// The rest of the Core, the menu, the configuration and the profiles pick it up on their own.
 
 use crate::game::essentials_status::Status;
 use crate::game::essentials_types::{Anchor, Module};
 
-/// Un module connu. L'ordre des variantes est l'ordre de `MODULES`.
+/// A known module. The variant order is the order of `MODULES`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ModuleId {
     Status,
 }
 
-/// La fiche d'un module : ce que le Core, l'interface et la configuration en savent.
+/// A module's descriptor: what the Core, the UI and the configuration know about it.
 #[derive(Clone, Copy, Debug)]
 pub struct Descriptor {
     pub id: ModuleId,
-    /// Son nom dans les fichiers et les commandes (`a-z`, `0-9`, `_`) : ne jamais le changer.
+    /// Its name in files and commands (`a-z`, `0-9`, `_`): never change it.
     pub key: &'static str,
     pub name: &'static str,
     pub description: &'static str,
@@ -31,18 +31,18 @@ pub struct Descriptor {
 pub const MODULES: &[Descriptor] = &[Descriptor {
     id: ModuleId::Status,
     key: "status",
-    name: "Témoin Essentials",
-    description: "Une petite boîte qui montre que le Core tourne, avec le profil actif.",
+    name: "Essentials Status",
+    description: "A small box showing that the Core is running, with the active profile.",
     default_on: true,
     has_widget: true,
     default_anchor: Anchor::TopRight,
 }];
 
-/// Le nombre de modules.
+/// The number of modules.
 pub const COUNT: usize = MODULES.len();
 
 impl ModuleId {
-    /// Sa place dans `MODULES` (et dans les tableaux du Core).
+    /// Its position in `MODULES` (and in the Core's arrays).
     pub fn index(self) -> usize {
         self as usize
     }
@@ -59,20 +59,20 @@ impl ModuleId {
         MODULES.iter().find(|d| d.key == key).map(|d| d.id)
     }
 
-    /// Tous les modules, dans l'ordre du registre.
+    /// All modules, in registry order.
     pub fn all() -> impl Iterator<Item = ModuleId> {
         MODULES.iter().map(|d| d.id)
     }
 }
 
-/// L'état de chaque module, un champ par module.
+/// The state of each module, one field per module.
 #[derive(Debug, Default)]
 pub struct Modules {
     pub status: Status,
 }
 
 impl Modules {
-    /// Le module `id`, par son interface commune : une référence, sans allocation.
+    /// The module `id`, through its common interface: a reference, no allocation.
     pub fn get_mut(&mut self, id: ModuleId) -> &mut dyn Module {
         #[cfg(test)]
         CALLS.with(|c| {
@@ -86,8 +86,8 @@ impl Modules {
     }
 }
 
-// Tests : combien de fois chaque module a été appelé sur ce thread. `get_mut` est
-// la seule porte vers un module, donc ce compteur voit tous les appels.
+// Tests: how many times each module was called on this thread. `get_mut` is the
+// only way into a module, so this counter sees every call.
 #[cfg(test)]
 thread_local! {
     static CALLS: std::cell::Cell<[u64; COUNT]> = const { std::cell::Cell::new([0; COUNT]) };
@@ -103,20 +103,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn l_ordre_du_registre_suit_l_enum() {
+    fn registry_order_follows_the_enum() {
         for (i, d) in MODULES.iter().enumerate() {
-            assert_eq!(d.id.index(), i, "{} n'est pas à sa place dans MODULES", d.key);
+            assert_eq!(d.id.index(), i, "{} is not at its place in MODULES", d.key);
         }
     }
 
     #[test]
-    fn les_cles_sont_uniques_et_valides() {
+    fn keys_are_unique_and_valid() {
         for (i, d) in MODULES.iter().enumerate() {
             assert!(!d.key.is_empty());
             assert!(d.key.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'));
-            assert!(MODULES[i + 1..].iter().all(|o| o.key != d.key), "clé en double : {}", d.key);
+            assert!(MODULES[i + 1..].iter().all(|o| o.key != d.key), "duplicate key: {}", d.key);
             assert_eq!(ModuleId::from_key(d.key), Some(d.id));
         }
-        assert_eq!(ModuleId::from_key("inconnu"), None);
+        assert_eq!(ModuleId::from_key("unknown"), None);
     }
 }

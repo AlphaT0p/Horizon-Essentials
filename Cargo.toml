@@ -6,13 +6,13 @@ license = "MIT"
 publish = false
 description = "Horizon Essentials: test harness for the bundle modules (cargo test), without compiling Horizon."
 
-# Les modules du bundle sont du Rust pur : ce crate les assemble sous `crate::game::*`,
-# exactement comme le jeu les voit, pour les tester sur l'ordinateur.
+# The bundle modules are plain Rust: this crate assembles them under `crate::game::*`,
+# exactly as the game sees them, to test them on the computer.
 [lib]
 path = "harness/lib.rs"
 
-# Les mêmes versions que le Cargo.lock de Horizon 9f42064 : dans le jeu, ces crates sont
-# déjà des dépendances de horizon-client, le bundle n'en ajoute aucune.
+# The same versions as Horizon 9f42064's Cargo.lock: in the game, these crates are
+# already dependencies of horizon-client, so the bundle adds none.
 [dependencies]
 serde = { version = "=1.0.229", features = ["derive"] }
 serde_json = "=1.0.151"

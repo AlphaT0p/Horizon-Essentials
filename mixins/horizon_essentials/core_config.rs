@@ -1,11 +1,11 @@
-// Horizon Essentials : la configuration (crate::game::essentials_config).
+// Horizon Essentials: the configuration (crate::game::essentials_config).
 //
-// Résilience : la lecture ne fait jamais planter. Un fichier illisible donne la
-// configuration par défaut ; un champ absent, d'un mauvais type ou hors limites
-// prend sa valeur par défaut sans toucher aux autres ; un module inconnu (ajouté
-// par une version plus récente) est gardé tel quel ; un module absent (ajouté par
-// cette version) reçoit ses réglages par défaut. Chaque correction est signalée
-// par un avertissement, que le Core affiche une fois dans le chat.
+// Resilience: reading never crashes. An unreadable file gives the default
+// configuration; a missing field, a field of the wrong type or out of range
+// gets its default value without touching the others; an unknown module (added
+// by a newer version) is kept as is; a missing module (added by this version)
+// gets its default settings. Every correction is reported by a warning, which
+// the Core shows once in the chat.
 
 use std::collections::BTreeMap;
 
@@ -14,36 +14,36 @@ use serde_json::Value;
 use crate::game::essentials_registry::{COUNT, Descriptor, MODULES, ModuleId};
 use crate::game::essentials_types::{Action, Anchor};
 
-/// La version du format. Une version plus récente se lit quand même, au mieux.
+/// The format version. A newer version is still read, as well as possible.
 pub const CONFIG_VERSION: u32 = 1;
 pub const SCALE_MIN: u16 = 50;
 pub const SCALE_MAX: u16 = 200;
-/// L'opacité du fond par défaut : 47 % donne l'alpha 0x78, celui des boîtes de Horizon.
+/// The default background opacity: 47 % gives alpha 0x78, the one of Horizon's boxes.
 pub const DEFAULT_BACKGROUND: u8 = 47;
 pub const DEFAULT_TEXT: &str = "FFFFFF";
 
-/// Où et à quelle taille le widget s'affiche (le HUD Editor écrit ici).
+/// Where and at what size the widget is shown (the HUD Editor writes here).
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize)]
 pub struct Layout {
     pub anchor: Anchor,
-    /// Vrai : empilé automatiquement dans le coin de `anchor` avec les autres boîtes.
-    /// Faux : placé librement, à `x` et `y`.
+    /// True: stacked automatically in the `anchor` corner with the other boxes.
+    /// False: placed freely, at `x` and `y`.
     pub auto: bool,
-    /// La part de la place libre à gauche (0 à 1) : le widget reste à l'écran
-    /// quand la fenêtre change de taille.
+    /// The share of the free space on the left (0 to 1): the widget stays on
+    /// screen when the window is resized.
     pub x: f32,
-    /// La part de la place libre au-dessus (0 à 1).
+    /// The share of the free space above (0 to 1).
     pub y: f32,
-    /// En pourcents, de 50 à 200.
+    /// In percent, from 50 to 200.
     pub scale: u16,
 }
 
-/// Les couleurs du widget.
+/// The widget colors.
 #[derive(Clone, Debug, PartialEq, serde::Serialize)]
 pub struct Style {
-    /// Opacité du fond, de 0 à 100 %.
+    /// Background opacity, from 0 to 100 %.
     pub background: u8,
-    /// Couleur du texte, `RRGGBB`.
+    /// Text color, `RRGGBB`.
     pub text: String,
     pub shadow: bool,
 }
@@ -58,11 +58,11 @@ pub struct ModuleConfig {
 #[derive(Clone, Debug, PartialEq, serde::Serialize)]
 pub struct Config {
     pub version: u32,
-    /// Par clé de module. Une `BTreeMap` garde un ordre stable dans le fichier.
+    /// By module key. A `BTreeMap` keeps a stable order in the file.
     pub modules: BTreeMap<String, ModuleConfig>,
 }
 
-/// Le style prêt pour le rendu.
+/// The style, ready for rendering.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct ResolvedStyle {
     pub background: u32,
@@ -70,15 +70,15 @@ pub struct ResolvedStyle {
     pub shadow: bool,
 }
 
-/// La configuration prête pour le rendu : des tableaux indexés par `ModuleId`,
-/// recalculés seulement quand la configuration change, pour qu'une frame ne
-/// cherche jamais une clé dans une table.
+/// The configuration, ready for rendering: arrays indexed by `ModuleId`,
+/// recomputed only when the configuration changes, so that a frame never
+/// looks up a key in a map.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Resolved {
     pub on: [bool; COUNT],
     pub layout: [Layout; COUNT],
     pub style: [ResolvedStyle; COUNT],
-    /// Le nombre de modules actifs, compté une fois à chaque changement.
+    /// The number of active modules, counted once per change.
     active: usize,
 }
 
@@ -116,7 +116,7 @@ impl ModuleConfig {
         ModuleConfig { on: d.default_on, layout: Layout::default_for(d), style: Style::default() }
     }
 
-    /// Pour un module que ce registre ne connaît pas.
+    /// For a module this registry does not know.
     fn default_unknown() -> ModuleConfig {
         ModuleConfig {
             on: false,
@@ -137,8 +137,8 @@ impl Default for Config {
 }
 
 impl Config {
-    /// La configuration d'un module du registre (toujours présente après `parse`
-    /// ou `default`, sinon ses réglages par défaut).
+    /// The configuration of a registry module (always present after `parse`
+    /// or `default`, otherwise its default settings).
     pub fn module(&self, id: ModuleId) -> ModuleConfig {
         self.modules
             .get(id.key())
@@ -153,7 +153,7 @@ impl Config {
     }
 
     pub fn resolve(&self) -> Resolved {
-        let first = self.module(ModuleId::all().next().expect("au moins un module"));
+        let first = self.module(ModuleId::all().next().expect("at least one module"));
         let mut r = Resolved {
             on: [false; COUNT],
             layout: [first.layout; COUNT],
@@ -170,8 +170,8 @@ impl Config {
         r
     }
 
-    /// Applique une action. Vrai si la configuration a changé.
-    /// `Reload` ne change rien ici : c'est le stockage qui relit le disque.
+    /// Applies an action. True if the configuration changed.
+    /// `Reload` changes nothing here: the storage reads the disk again.
     pub fn apply(&mut self, action: Action) -> bool {
         let before = self.clone();
         match action {
@@ -188,31 +188,31 @@ impl Config {
     }
 
     pub fn to_json(&self) -> String {
-        // La sérialisation de ces types ne peut pas échouer (que des chaînes, nombres et booléens).
+        // Serializing these types cannot fail (only strings, numbers and booleans).
         serde_json::to_string_pretty(self).unwrap_or_default()
     }
 
-    /// Lit un fichier de configuration. Ne panique jamais : renvoie toujours une
-    /// configuration complète et valide, et la liste de ce qui a été corrigé.
+    /// Reads a configuration file. Never panics: always returns a complete and
+    /// valid configuration, and the list of what was corrected.
     pub fn parse(text: &str) -> (Config, Vec<String>) {
         let mut warnings = Vec::new();
         let root = match serde_json::from_str::<Value>(text) {
             Ok(Value::Object(root)) => root,
             Ok(_) => {
-                warnings.push("configuration invalide (pas un objet JSON) : valeurs par défaut".to_owned());
+                warnings.push("invalid configuration (not a JSON object): default values".to_owned());
                 return (Config::default(), warnings);
             }
             Err(e) => {
-                warnings.push(format!("configuration illisible ({e}) : valeurs par défaut"));
+                warnings.push(format!("unreadable configuration ({e}): default values"));
                 return (Config::default(), warnings);
             }
         };
         match root.get("version").and_then(Value::as_u64) {
             Some(v) if v > u64::from(CONFIG_VERSION) => warnings.push(format!(
-                "configuration d'une version plus récente ({v}) : lue au mieux"
+                "configuration from a newer version ({v}): read as well as possible"
             )),
             Some(_) => {}
-            None => warnings.push("configuration sans version : lue comme la version 1".to_owned()),
+            None => warnings.push("configuration without a version: read as version 1".to_owned()),
         }
         let mut config = Config { version: CONFIG_VERSION, modules: BTreeMap::new() };
         match root.get("modules") {
@@ -226,7 +226,7 @@ impl Config {
                     config.modules.insert(key.clone(), module);
                 }
             }
-            Some(_) => warnings.push("« modules » n'est pas un objet : réglages par défaut".to_owned()),
+            Some(_) => warnings.push("\"modules\" is not an object: default settings".to_owned()),
             None => {}
         }
         for d in MODULES {
@@ -239,7 +239,7 @@ impl Config {
     }
 }
 
-/// `RRGGBB` (ou `#RRGGBB`) en entier, ou None.
+/// `RRGGBB` (or `#RRGGBB`) as an integer, or None.
 pub fn parse_rgb(text: &str) -> Option<u32> {
     let hex = text.strip_prefix('#').unwrap_or(text);
     if hex.len() != 6 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
@@ -250,10 +250,10 @@ pub fn parse_rgb(text: &str) -> Option<u32> {
 
 fn read_module(key: &str, value: &Value, default: ModuleConfig, warnings: &mut Vec<String>) -> ModuleConfig {
     let Value::Object(fields) = value else {
-        warnings.push(format!("{key} : réglages invalides, valeurs par défaut"));
+        warnings.push(format!("{key}: invalid settings, default values"));
         return default;
     };
-    let mut fix = |what: &str| warnings.push(format!("{key}.{what} invalide : valeur par défaut"));
+    let mut fix = |what: &str| warnings.push(format!("invalid {key}.{what}: default value"));
     let on = read_bool(fields.get("on"), default.on, || fix("on"));
     let layout = match fields.get("layout") {
         None => default.layout,
@@ -352,7 +352,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn la_configuration_par_defaut_couvre_le_registre() {
+    fn the_default_configuration_covers_the_registry() {
         let c = Config::default();
         assert_eq!(c.version, CONFIG_VERSION);
         for d in MODULES {
@@ -361,7 +361,7 @@ mod tests {
     }
 
     #[test]
-    fn aller_retour_json() {
+    fn json_round_trip() {
         let mut c = Config::default();
         c.apply(Action::Toggle(ModuleId::Status));
         let (back, warnings) = Config::parse(&c.to_json());
@@ -370,29 +370,29 @@ mod tests {
     }
 
     #[test]
-    fn un_fichier_illisible_donne_les_valeurs_par_defaut() {
-        for text in ["", "{", "[1, 2]", "\"texte\"", "null", "\u{0}\u{1}binaire"] {
+    fn an_unreadable_file_gives_default_values() {
+        for text in ["", "{", "[1, 2]", "\"text\"", "null", "\u{0}\u{1}binary"] {
             let (c, warnings) = Config::parse(text);
-            assert_eq!(c, Config::default(), "pour {text:?}");
-            assert_eq!(warnings.len(), 1, "pour {text:?}");
+            assert_eq!(c, Config::default(), "for {text:?}");
+            assert_eq!(warnings.len(), 1, "for {text:?}");
         }
     }
 
     #[test]
-    fn un_champ_invalide_ne_touche_que_lui() {
+    fn an_invalid_field_only_affects_itself() {
         let text = r#"{ "version": 1, "modules": { "status": {
-            "on": "oui",
+            "on": "yes",
             "layout": { "anchor": "bottom_left", "auto": false, "x": 2.5, "y": 0.25, "scale": 900 },
             "style": { "background": 80, "text": "zzz", "shadow": false } } } }"#;
         let (c, warnings) = Config::parse(text);
         let m = &c.modules["status"];
         let d = ModuleConfig::default_for(ModuleId::Status.descriptor());
-        assert_eq!(m.on, d.on, "« oui » n'est pas un booléen");
+        assert_eq!(m.on, d.on, "\"yes\" is not a boolean");
         assert_eq!(m.layout.anchor, Anchor::BottomLeft);
         assert!(!m.layout.auto);
-        assert_eq!(m.layout.x, d.layout.x, "2.5 est hors de 0..1");
+        assert_eq!(m.layout.x, d.layout.x, "2.5 is outside 0..1");
         assert_eq!(m.layout.y, 0.25);
-        assert_eq!(m.layout.scale, d.layout.scale, "900 % est hors limites");
+        assert_eq!(m.layout.scale, d.layout.scale, "900 % is out of range");
         assert_eq!(m.style.background, 80);
         assert_eq!(m.style.text, DEFAULT_TEXT);
         assert!(!m.style.shadow);
@@ -400,31 +400,31 @@ mod tests {
     }
 
     #[test]
-    fn un_module_inconnu_est_garde_et_un_module_absent_est_ajoute() {
-        let text = r#"{ "version": 1, "modules": { "futur": { "on": true } } }"#;
+    fn an_unknown_module_is_kept_and_a_missing_module_is_added() {
+        let text = r#"{ "version": 1, "modules": { "future": { "on": true } } }"#;
         let (c, _) = Config::parse(text);
-        assert!(c.modules["futur"].on, "le module d'une version plus récente survit");
+        assert!(c.modules["future"].on, "the module from a newer version survives");
         assert_eq!(c.modules["status"], ModuleConfig::default_for(ModuleId::Status.descriptor()));
         let (again, _) = Config::parse(&c.to_json());
         assert_eq!(again, c);
     }
 
     #[test]
-    fn une_version_plus_recente_se_lit_au_mieux() {
+    fn a_newer_version_is_read_as_well_as_possible() {
         let (c, warnings) = Config::parse(r#"{ "version": 7, "modules": { "status": { "on": false } } }"#);
         assert!(!c.modules["status"].on);
         assert_eq!(warnings.len(), 1);
-        assert_eq!(c.version, CONFIG_VERSION, "réécrite au format de cette version");
+        assert_eq!(c.version, CONFIG_VERSION, "rewritten in this version's format");
     }
 
     #[test]
-    fn les_actions() {
+    fn actions() {
         let mut c = Config::default();
         let id = ModuleId::Status;
         let on = c.module(id).on;
         assert!(c.apply(Action::Toggle(id)));
         assert_eq!(c.module(id).on, !on);
-        assert!(!c.apply(Action::Set(id, !on)), "déjà dans cet état : rien ne change");
+        assert!(!c.apply(Action::Set(id, !on)), "already in that state: nothing changes");
         assert!(c.apply(Action::ResetModule(id)));
         assert_eq!(c.module(id).on, on);
         c.apply(Action::Toggle(id));
@@ -434,9 +434,9 @@ mod tests {
     }
 
     #[test]
-    fn le_style_resolu() {
+    fn resolved_style() {
         let s = Style::default().resolve();
-        assert_eq!(s.background, 0x7800_0000, "47 % = l'alpha des boîtes de Horizon");
+        assert_eq!(s.background, 0x7800_0000, "47 % = the alpha of Horizon's boxes");
         assert_eq!(s.text, 0xFF_FFFF);
         assert_eq!(parse_rgb("#55ff55"), Some(0x55FF55));
         assert_eq!(parse_rgb("12345"), None);

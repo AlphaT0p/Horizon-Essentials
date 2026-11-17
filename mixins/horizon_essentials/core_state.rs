@@ -1,20 +1,19 @@
-// Horizon Essentials : l'état global unique (crate::game::essentials_state).
+// Horizon Essentials: the single global state (crate::game::essentials_state).
 //
-// Un seul `State` par thread : celui de la fenêtre. En solo, le serveur intégré
-// tourne sur un autre thread et aurait le sien ; les helpers n'appellent le Core
-// que depuis la fenêtre (`native_window()`).
+// One `State` per thread: the window's. In singleplayer, the integrated server
+// runs on another thread and would have its own; the helpers only call the Core
+// from the window (`native_window()`).
 //
-// Disque : le thread du jeu n'y touche jamais. Le chargement et les sauvegardes
-// passent par le thread « Essentials I/O » (essentials_store::Io). Si ce thread ne
-// peut pas démarrer, le Core travaille sans lui (comme avant) plutôt que de
-// perdre les réglages.
+// Disk: the game thread never touches it. Loading and saving go through the
+// "Essentials I/O" thread (essentials_store::Io). If that thread cannot start,
+// the Core works without it (as before) rather than losing the settings.
 //
-// Chargement asynchrone : tant que la configuration n'est pas lue, `loaded` est
-// faux, le HUD ne dessine rien et les modules ne reçoivent rien. Un rechargement
-// garde la configuration actuelle affichée jusqu'à l'arrivée de la nouvelle.
+// Asynchronous loading: until the configuration has been read, `loaded` is false,
+// the HUD draws nothing and the modules receive nothing. A reload keeps the
+// current configuration displayed until the new one arrives.
 //
-// Résilience : l'accès passe par `with`, qui refuse un accès imbriqué (un hook
-// déclenché pendant un autre) au lieu de paniquer, ce qui arrêterait le jeu.
+// Resilience: access goes through `with`, which refuses a nested access (a hook
+// fired during another one) instead of panicking, which would stop the game.
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -26,31 +25,31 @@ use crate::game::essentials_registry::{ModuleId, Modules};
 use crate::game::essentials_store::{self as store, Io, Loaded, Reply, Request, SaveTimer};
 use crate::game::essentials_types::Action;
 
-/// Au plus autant de messages en attente pour le chat (les plus anciens partent).
+/// At most this many messages waiting for the chat (the oldest ones are dropped).
 const MAX_MESSAGES: usize = 16;
-/// À la fermeture, le temps laissé au thread d'E/S pour finir d'écrire.
+/// On shutdown, the time given to the I/O thread to finish writing.
 pub const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(2);
 
 pub struct State {
     pub dir: PathBuf,
     pub profile: String,
     pub config: Config,
-    /// La configuration prête pour le rendu, recalculée à chaque changement.
+    /// The configuration ready for rendering, recomputed on every change.
     pub resolved: Resolved,
-    /// Faux tant que la configuration n'a pas été lue une première fois.
+    /// False until the configuration has been read once.
     pub loaded: bool,
-    /// Augmente à chaque changement de configuration : les widgets et l'interface
-    /// comparent ce nombre pour savoir s'il faut reconstruire leurs formes.
+    /// Increases on every configuration change: widgets and the UI compare this
+    /// number to know whether to rebuild their shapes.
     pub revision: u64,
     pub timer: SaveTimer,
-    /// Les messages à montrer dans le chat, dès que le joueur est dans un monde.
+    /// The messages to show in the chat, as soon as the player is in a world.
     pub messages: VecDeque<String>,
-    /// L'état de chaque module.
+    /// The state of each module.
     pub modules: Modules,
-    /// Les ticks vus depuis le chargement.
+    /// The ticks seen since loading.
     pub tick: u64,
     io: Option<Io>,
-    /// La dernière sauvegarde envoyée et la dernière confirmée par le thread d'E/S.
+    /// The last save sent and the last one confirmed by the I/O thread.
     save_sent: u64,
     save_done: u64,
     reloading: bool,
@@ -77,20 +76,20 @@ impl State {
         }
     }
 
-    /// Démarre : demande la lecture au thread d'E/S et rend aussitôt la main.
+    /// Starts: asks the I/O thread to read and returns at once.
     pub fn start(dir: &Path) -> State {
         let mut s = State::empty(dir);
         match Io::spawn() {
             Some(io) if io.send(Request::Load { dir: dir.to_owned() }).is_ok() => s.io = Some(io),
             _ => {
-                // Pas de thread d'E/S : lecture directe, une seule fois.
+                // No I/O thread: direct read, only once.
                 s.finish_load(store::load(dir));
             }
         }
         s
     }
 
-    /// Lecture directe, sans thread (tests).
+    /// Direct read, without a thread (tests).
     pub fn load(dir: &Path) -> State {
         let mut s = State::empty(dir);
         s.finish_load(store::load(dir));
@@ -106,11 +105,11 @@ impl State {
         self.loaded = true;
         self.changed();
         if std::mem::take(&mut self.reloading) {
-            self.say("configuration rechargée");
+            self.say("configuration reloaded");
         }
     }
 
-    /// Un message pour le chat, préfixé du nom du mod.
+    /// A message for the chat, prefixed with the mod name.
     pub fn say(&mut self, text: impl Into<String>) {
         if self.messages.len() == MAX_MESSAGES {
             self.messages.pop_front();
@@ -118,13 +117,13 @@ impl State {
         self.messages.push_back(format!("[Essentials] {}", text.into()));
     }
 
-    /// Une réponse du thread d'E/S est attendue (lecture ou écriture en cours).
+    /// A reply from the I/O thread is expected (read or write in progress).
     fn awaiting(&self) -> bool {
         !self.loaded || self.reloading || self.save_done < self.save_sent
     }
 
-    /// Relit les réponses du thread d'E/S, sans attendre. Quand rien n'est attendu
-    /// (presque toujours), le canal n'est même pas consulté.
+    /// Picks up the I/O thread's replies, without waiting. When nothing is expected
+    /// (almost always), the channel is not even checked.
     pub fn poll(&mut self) {
         if !self.awaiting() {
             return;
@@ -140,17 +139,17 @@ impl State {
             Reply::Saved { seq, error } => {
                 self.save_done = self.save_done.max(seq);
                 if let Some(e) = error {
-                    self.say(format!("sauvegarde impossible ({e}) : réglages gardés en mémoire"));
+                    self.say(format!("could not save ({e}): settings kept in memory"));
                 }
             }
             Reply::Stopped => {}
         }
     }
 
-    /// Applique une action. Vrai si quelque chose a changé (ou va changer : rechargement).
+    /// Applies an action. True if something changed (or will change: reload).
     pub fn apply(&mut self, action: Action) -> bool {
         if !self.loaded {
-            self.say("configuration en cours de chargement, réessaie dans un instant");
+            self.say("configuration is loading, try again in a moment");
             return false;
         }
         if action == Action::Reload {
@@ -165,9 +164,9 @@ impl State {
         true
     }
 
-    /// Relit le disque, après avoir envoyé un changement en attente (le thread d'E/S
-    /// traite les demandes dans l'ordre : l'écriture passe avant la lecture). La
-    /// configuration actuelle reste affichée jusqu'à l'arrivée de la nouvelle.
+    /// Reads the disk again, after sending any pending change (the I/O thread
+    /// handles requests in order: the write comes before the read). The current
+    /// configuration stays displayed until the new one arrives.
     pub fn reload(&mut self) {
         self.flush();
         self.reloading = true;
@@ -183,7 +182,7 @@ impl State {
         let before = self.resolved.on;
         self.resolved = self.config.resolve();
         self.revision += 1;
-        // Prévient chaque module dont l'activation a changé.
+        // Notifies every module whose enabled state changed.
         for id in ModuleId::all() {
             let on = self.resolved.on[id.index()];
             if on != before[id.index()] {
@@ -192,8 +191,8 @@ impl State {
         }
     }
 
-    /// Le temps passe : relit les réponses du thread d'E/S, et envoie la sauvegarde
-    /// quand la configuration n'a plus bougé depuis une seconde.
+    /// Time passes: picks up the I/O thread's replies, and sends the save once the
+    /// configuration has not changed for one second.
     pub fn advance(&mut self, elapsed_ms: f32) {
         self.poll();
         if self.loaded && self.timer.advance(elapsed_ms) {
@@ -201,8 +200,8 @@ impl State {
         }
     }
 
-    /// Envoie maintenant au thread d'E/S le changement en attente. Le JSON est
-    /// préparé ici (quelques µs), l'écriture se fait sur le thread d'E/S.
+    /// Sends the pending change to the I/O thread now. The JSON is prepared here
+    /// (a few µs), the write happens on the I/O thread.
     pub fn flush(&mut self) {
         if !self.timer.pending() {
             return;
@@ -221,17 +220,17 @@ impl State {
             None => Some(request),
         };
         if let Some(Request::Save { json, seq, .. }) = refused {
-            // Plus de thread d'E/S : écriture directe plutôt que perte des réglages.
+            // No I/O thread any more: direct write rather than losing the settings.
             self.io = None;
             if let Err(e) = store::save_json(&self.dir, &self.profile, &json) {
-                self.say(format!("sauvegarde impossible ({e}) : réglages gardés en mémoire"));
+                self.say(format!("could not save ({e}): settings kept in memory"));
             }
             self.save_done = seq;
         }
     }
 
-    /// Fermeture du jeu : envoie le dernier changement et attend que le thread d'E/S
-    /// ait tout écrit (au plus `SHUTDOWN_TIMEOUT`).
+    /// Game shutdown: sends the last change and waits until the I/O thread has
+    /// written everything (at most `SHUTDOWN_TIMEOUT`).
     pub fn shutdown(&mut self) {
         self.flush();
         if let Some(io) = self.io.take() {
@@ -241,13 +240,13 @@ impl State {
         }
     }
 
-    /// Vrai quand rien n'attend le disque : configuration lue (et relue si un
-    /// rechargement est en cours) et sauvegardes confirmées.
+    /// True when nothing is waiting on the disk: configuration read (and read again
+    /// if a reload is in progress) and saves confirmed.
     pub fn idle(&self) -> bool {
         self.loaded && !self.reloading && !self.timer.pending() && self.save_done >= self.save_sent
     }
 
-    /// Attend que rien n'attende le disque (tests et outils de mesure ; jamais en jeu).
+    /// Waits until nothing is waiting on the disk (tests and benchmarks; never in game).
     pub fn wait_idle(&mut self, timeout: Duration) -> bool {
         let deadline = Instant::now() + timeout;
         while !self.idle() {
@@ -263,7 +262,7 @@ impl State {
         true
     }
 
-    /// Le prochain message pour le chat.
+    /// The next message for the chat.
     pub fn next_message(&mut self) -> Option<String> {
         self.messages.pop_front()
     }
@@ -273,9 +272,9 @@ thread_local! {
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
 }
 
-/// Donne l'état à `f`, en le démarrant la première fois (lecture demandée au thread
-/// d'E/S depuis le dossier que `dir` indique). None si l'état est déjà emprunté
-/// (accès imbriqué) : l'appelant ne fait rien plutôt que de faire planter le jeu.
+/// Gives the state to `f`, starting it the first time (read requested from the I/O
+/// thread, from the folder `dir` gives). None if the state is already borrowed
+/// (nested access): the caller does nothing rather than crash the game.
 pub fn with<R>(dir: impl FnOnce() -> PathBuf, f: impl FnOnce(&mut State) -> R) -> Option<R> {
     STATE.with(|cell| {
         let mut slot = cell.try_borrow_mut().ok()?;
@@ -284,7 +283,7 @@ pub fn with<R>(dir: impl FnOnce() -> PathBuf, f: impl FnOnce(&mut State) -> R) -
     })
 }
 
-/// L'état s'il existe déjà, chargé ou non (jamais créé ici).
+/// The state if it already exists, loaded or not (never created here).
 pub fn with_existing<R>(f: impl FnOnce(&mut State) -> R) -> Option<R> {
     STATE.with(|cell| {
         let mut slot = cell.try_borrow_mut().ok()?;
@@ -292,7 +291,7 @@ pub fn with_existing<R>(f: impl FnOnce(&mut State) -> R) -> Option<R> {
     })
 }
 
-/// L'état s'il est chargé : pour le rendu, qui ne déclenche jamais rien.
+/// The state if it is loaded: for rendering, which never starts anything.
 pub fn with_loaded<R>(f: impl FnOnce(&mut State) -> R) -> Option<R> {
     STATE.with(|cell| {
         let mut slot = cell.try_borrow_mut().ok()?;
@@ -310,33 +309,33 @@ mod tests {
 
     fn started(d: &TempDir) -> State {
         let mut s = State::start(&d.0);
-        assert!(s.wait_idle(WAIT), "chargement asynchrone");
+        assert!(s.wait_idle(WAIT), "asynchronous loading");
         s
     }
 
     #[test]
-    fn le_chargement_est_asynchrone_et_le_hud_attend() {
-        let d = TempDir::new("etat-async");
+    fn loading_is_asynchronous_and_the_hud_waits() {
+        let d = TempDir::new("state-async");
         let mut s = State::start(&d.0);
-        // Juste après le démarrage, rien n'est forcément lu : on ne dessine rien,
-        // et une action est refusée proprement.
+        // Right after starting, nothing may have been read yet: nothing is drawn,
+        // and an action is cleanly refused.
         if !s.loaded {
             assert!(!s.apply(Action::Toggle(ModuleId::Status)));
-            assert!(s.next_message().unwrap().contains("en cours de chargement"));
+            assert!(s.next_message().unwrap().contains("is loading"));
         }
         assert!(s.wait_idle(WAIT));
         assert!(s.loaded);
     }
 
     #[test]
-    fn une_action_est_sauvegardee_apres_une_seconde_calme() {
-        let d = TempDir::new("etat-sauvegarde");
+    fn an_action_is_saved_after_one_quiet_second() {
+        let d = TempDir::new("state-save");
         let mut s = started(&d);
         let on = s.resolved.on[ModuleId::Status.index()];
         assert!(s.apply(Action::Toggle(ModuleId::Status)));
-        assert_eq!(s.resolved.on[ModuleId::Status.index()], !on, "Resolved suit la configuration");
+        assert_eq!(s.resolved.on[ModuleId::Status.index()], !on, "Resolved follows the configuration");
         s.advance(400.0);
-        assert!(!profile_path(&d.0, DEFAULT_PROFILE).exists(), "pas encore");
+        assert!(!profile_path(&d.0, DEFAULT_PROFILE).exists(), "not yet");
         s.advance(700.0);
         assert!(s.wait_idle(WAIT));
         let saved = store::load(&d.0);
@@ -344,10 +343,10 @@ mod tests {
     }
 
     #[test]
-    fn une_sauvegarde_pendant_une_autre_n_est_pas_perdue() {
-        let d = TempDir::new("etat-rafale");
+    fn a_save_during_another_one_is_not_lost() {
+        let d = TempDir::new("state-burst");
         let mut s = started(&d);
-        // 50 changements envoyés sans attendre : le dernier état doit arriver sur disque.
+        // 50 changes sent without waiting: the last state must reach the disk.
         for _ in 0..50 {
             s.apply(Action::Toggle(ModuleId::Status));
             s.flush();
@@ -358,18 +357,18 @@ mod tests {
     }
 
     #[test]
-    fn la_fermeture_ecrit_le_dernier_changement() {
-        let d = TempDir::new("etat-fermeture");
+    fn shutdown_writes_the_last_change() {
+        let d = TempDir::new("state-shutdown");
         let mut s = started(&d);
         s.apply(Action::Toggle(ModuleId::Status));
-        // Fermeture tout de suite, sans attendre la seconde de calme.
+        // Shut down right away, without waiting for the quiet second.
         s.shutdown();
         assert_eq!(store::load(&d.0).config, s.config);
     }
 
     #[test]
-    fn une_action_sans_effet_ne_sauvegarde_rien() {
-        let d = TempDir::new("etat-sans-effet");
+    fn an_action_without_effect_saves_nothing() {
+        let d = TempDir::new("state-no-effect");
         let mut s = started(&d);
         let on = s.resolved.on[ModuleId::Status.index()];
         let revision = s.revision;
@@ -381,47 +380,47 @@ mod tests {
     }
 
     #[test]
-    fn recharger_relit_le_disque_sans_vider_l_affichage() {
-        let d = TempDir::new("etat-recharger");
+    fn reload_reads_the_disk_without_clearing_the_display() {
+        let d = TempDir::new("state-reload");
         let mut s = started(&d);
         let mut other = Config::default();
         other.apply(Action::Toggle(ModuleId::Status));
         store::save(&d.0, DEFAULT_PROFILE, &other).unwrap();
         assert!(s.apply(Action::Reload));
-        assert!(s.loaded, "l'ancienne configuration reste affichée pendant la relecture");
+        assert!(s.loaded, "the old configuration stays displayed while reading again");
         assert!(s.wait_idle(WAIT));
         assert_eq!(s.config, other);
-        assert_eq!(s.next_message().as_deref(), Some("[Essentials] configuration rechargée"));
+        assert_eq!(s.next_message().as_deref(), Some("[Essentials] configuration reloaded"));
     }
 
     #[test]
-    fn une_erreur_d_ecriture_devient_un_message() {
-        let d = TempDir::new("etat-erreur");
+    fn a_write_error_becomes_a_message() {
+        let d = TempDir::new("state-error");
         let mut s = started(&d);
-        // Un fichier à la place du dossier « profiles » : l'écriture échoue.
-        std::fs::write(d.0.join("profiles"), "pas un dossier").unwrap();
+        // A file in place of the "profiles" folder: the write fails.
+        std::fs::write(d.0.join("profiles"), "not a folder").unwrap();
         s.apply(Action::Toggle(ModuleId::Status));
         s.flush();
         assert!(s.wait_idle(WAIT));
-        assert!(s.next_message().unwrap().contains("sauvegarde impossible"));
+        assert!(s.next_message().unwrap().contains("could not save"));
     }
 
     #[test]
-    fn les_avertissements_vont_dans_le_chat() {
-        let d = TempDir::new("etat-avertissements");
-        std::fs::write(d.0.join("active"), "Interdit").unwrap();
+    fn warnings_go_to_the_chat() {
+        let d = TempDir::new("state-warnings");
+        std::fs::write(d.0.join("active"), "Forbidden").unwrap();
         let mut s = started(&d);
-        assert!(s.next_message().unwrap().starts_with("[Essentials] profil actif invalide"));
+        assert!(s.next_message().unwrap().starts_with("[Essentials] invalid active profile"));
         assert_eq!(s.next_message(), None);
         for i in 0..40 {
             s.say(format!("{i}"));
         }
-        assert_eq!(s.messages.len(), MAX_MESSAGES, "la file est bornée");
+        assert_eq!(s.messages.len(), MAX_MESSAGES, "the queue is bounded");
     }
 
     #[test]
-    fn un_acces_imbrique_est_refuse_sans_paniquer() {
-        let d = TempDir::new("etat-imbrique");
+    fn a_nested_access_is_refused_without_panicking() {
+        let d = TempDir::new("state-nested");
         let dir = d.0.clone();
         let outer = with(
             || dir.clone(),
@@ -429,6 +428,6 @@ mod tests {
         );
         assert_eq!(outer, Some(true));
         assert!(with_existing(|s| s.wait_idle(WAIT)).unwrap());
-        assert!(with_loaded(|s| s.profile.clone()).is_some(), "chargé une fois, gardé ensuite");
+        assert!(with_loaded(|s| s.profile.clone()).is_some(), "loaded once, kept afterwards");
     }
 }

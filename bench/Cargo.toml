@@ -6,7 +6,7 @@ license = "MIT"
 publish = false
 description = "Horizon Essentials performance measurement protocol (outside test mode, as in the game)."
 
-# Programme indépendant : cargo run --release --manifest-path bench/Cargo.toml
+# Standalone program: cargo run --release --manifest-path bench/Cargo.toml
 [[bin]]
 name = "bench"
 path = "main.rs"

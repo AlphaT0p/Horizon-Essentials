@@ -8,8 +8,8 @@
 - Nothing is optimized without a before/after measurement using the same protocol.
 
 The first three rules are checked by every `cargo test` run (`core_events.rs`, tests
-`zero_allocation_par_frame`, `un_module_desactive_n_est_jamais_appele`,
-`aucune_operation_disque_sur_le_thread_du_jeu`).
+`zero_allocations_per_frame`, `a_disabled_module_is_never_called`,
+`no_disk_operation_on_the_game_thread`).
 
 ## Protocol (`bench/`)
 
