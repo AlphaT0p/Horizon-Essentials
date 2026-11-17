@@ -116,8 +116,16 @@ pub enum Action {
 /// A shape, in GUI pixels, relative to the widget's top-left corner.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Op {
-    Fill { rect: [f32; 4], argb: u32 },
-    Text { slot: usize, at: [f32; 2], rgb: u32, shadow: bool },
+    Fill {
+        rect: [f32; 4],
+        argb: u32,
+    },
+    Text {
+        slot: usize,
+        at: [f32; 2],
+        rgb: u32,
+        shadow: bool,
+    },
 }
 
 /// What a widget draws. `clear` keeps the memory: after the first frames,
@@ -152,7 +160,12 @@ impl Shapes {
             self.texts.push(text.to_owned());
         }
         self.used += 1;
-        self.ops.push(Op::Text { slot, at, rgb, shadow });
+        self.ops.push(Op::Text {
+            slot,
+            at,
+            rgb,
+            shadow,
+        });
     }
 
     pub fn ops(&self) -> &[Op] {
@@ -222,14 +235,21 @@ mod tests {
     #[test]
     fn the_id_follows_the_horizon_format() {
         // a-z, 0-9 and _ only (docs/mod-manifest).
-        assert!(MOD_ID.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'));
+        assert!(
+            MOD_ID
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+        );
     }
 
     #[test]
     fn every_anchor_is_read_back_by_its_name() {
         for a in Anchor::ALL {
             assert_eq!(Anchor::from_key(a.key()), Some(a));
-            assert_eq!(serde_json::to_string(&a).unwrap(), format!("\"{}\"", a.key()));
+            assert_eq!(
+                serde_json::to_string(&a).unwrap(),
+                format!("\"{}\"", a.key())
+            );
         }
         assert_eq!(Anchor::from_key("nowhere"), None);
     }
@@ -253,7 +273,15 @@ mod tests {
         s.text("two", [1.0, 2.0], 0, false);
         assert_eq!(s.texts.len(), 1, "the text reuses the existing slot");
         assert!(s.texts[0].capacity() >= capacity);
-        assert_eq!(s.ops(), &[Op::Text { slot: 0, at: [1.0, 2.0], rgb: 0, shadow: false }]);
+        assert_eq!(
+            s.ops(),
+            &[Op::Text {
+                slot: 0,
+                at: [1.0, 2.0],
+                rgb: 0,
+                shadow: false
+            }]
+        );
         assert_eq!(s.text_of(0), "two");
         assert_eq!(s.text_of(9), "");
     }

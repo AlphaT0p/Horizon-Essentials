@@ -16,9 +16,14 @@ fn essentials_command(game: &mut crate::game::Game<'_>, command: &str, ran: &mut
     let mut lines = reply.lines;
     if let Some(action) = reply.action {
         let changed = ev::apply(|| dir.clone(), action);
-        let line = ev::view(|| dir.clone(), |snapshot| {
-            snapshot.map(|s| ui::outcome(action, changed, s.resolved)).unwrap_or_default()
-        });
+        let line = ev::view(
+            || dir.clone(),
+            |snapshot| {
+                snapshot
+                    .map(|s| ui::outcome(action, changed, s.resolved))
+                    .unwrap_or_default()
+            },
+        );
         if let Some(line) = line.filter(|l| !l.is_empty()) {
             lines.push(line);
         }

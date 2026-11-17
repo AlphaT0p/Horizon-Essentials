@@ -80,7 +80,15 @@ impl State {
     pub fn start(dir: &Path) -> State {
         let mut s = State::empty(dir);
         match Io::spawn() {
-            Some(io) if io.send(Request::Load { dir: dir.to_owned() }).is_ok() => s.io = Some(io),
+            Some(io)
+                if io
+                    .send(Request::Load {
+                        dir: dir.to_owned(),
+                    })
+                    .is_ok() =>
+            {
+                s.io = Some(io)
+            }
             _ => {
                 // No I/O thread: direct read, only once.
                 s.finish_load(store::load(dir));
@@ -114,7 +122,8 @@ impl State {
         if self.messages.len() == MAX_MESSAGES {
             self.messages.pop_front();
         }
-        self.messages.push_back(format!("[Essentials] {}", text.into()));
+        self.messages
+            .push_back(format!("[Essentials] {}", text.into()));
     }
 
     /// A reply from the I/O thread is expected (read or write in progress).
@@ -170,7 +179,12 @@ impl State {
     pub fn reload(&mut self) {
         self.flush();
         self.reloading = true;
-        let sent = self.io.as_ref().is_some_and(|io| io.send(Request::Load { dir: self.dir.clone() }).is_ok());
+        let sent = self.io.as_ref().is_some_and(|io| {
+            io.send(Request::Load {
+                dir: self.dir.clone(),
+            })
+            .is_ok()
+        });
         if !sent {
             self.io = None;
             let loaded = store::load(&self.dir);
@@ -333,7 +347,11 @@ mod tests {
         let mut s = started(&d);
         let on = s.resolved.on[ModuleId::Status.index()];
         assert!(s.apply(Action::Toggle(ModuleId::Status)));
-        assert_eq!(s.resolved.on[ModuleId::Status.index()], !on, "Resolved follows the configuration");
+        assert_eq!(
+            s.resolved.on[ModuleId::Status.index()],
+            !on,
+            "Resolved follows the configuration"
+        );
         s.advance(400.0);
         assert!(!profile_path(&d.0, DEFAULT_PROFILE).exists(), "not yet");
         s.advance(700.0);
@@ -387,10 +405,16 @@ mod tests {
         other.apply(Action::Toggle(ModuleId::Status));
         store::save(&d.0, DEFAULT_PROFILE, &other).unwrap();
         assert!(s.apply(Action::Reload));
-        assert!(s.loaded, "the old configuration stays displayed while reading again");
+        assert!(
+            s.loaded,
+            "the old configuration stays displayed while reading again"
+        );
         assert!(s.wait_idle(WAIT));
         assert_eq!(s.config, other);
-        assert_eq!(s.next_message().as_deref(), Some("[Essentials] configuration reloaded"));
+        assert_eq!(
+            s.next_message().as_deref(),
+            Some("[Essentials] configuration reloaded")
+        );
     }
 
     #[test]
@@ -410,7 +434,11 @@ mod tests {
         let d = TempDir::new("state-warnings");
         std::fs::write(d.0.join("active"), "Forbidden").unwrap();
         let mut s = started(&d);
-        assert!(s.next_message().unwrap().starts_with("[Essentials] invalid active profile"));
+        assert!(
+            s.next_message()
+                .unwrap()
+                .starts_with("[Essentials] invalid active profile")
+        );
         assert_eq!(s.next_message(), None);
         for i in 0..40 {
             s.say(format!("{i}"));
@@ -428,6 +456,9 @@ mod tests {
         );
         assert_eq!(outer, Some(true));
         assert!(with_existing(|s| s.wait_idle(WAIT)).unwrap());
-        assert!(with_loaded(|s| s.profile.clone()).is_some(), "loaded once, kept afterwards");
+        assert!(
+            with_loaded(|s| s.profile.clone()).is_some(),
+            "loaded once, kept afterwards"
+        );
     }
 }

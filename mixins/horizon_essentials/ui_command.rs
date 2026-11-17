@@ -39,7 +39,11 @@ pub struct Reply {
 /// The arguments if `command` (without the `/`) is ours, otherwise None.
 pub fn ours(command: &str) -> Option<&str> {
     let rest = command.strip_prefix(NAME)?;
-    if rest.is_empty() || rest.starts_with(' ') { Some(rest.trim()) } else { None }
+    if rest.is_empty() || rest.starts_with(' ') {
+        Some(rest.trim())
+    } else {
+        None
+    }
 }
 
 /// Runs the command on the Core snapshot. While loading, nothing is changed:
@@ -51,14 +55,19 @@ pub fn run(args: &str, snapshot: Option<Snapshot<'_>>) -> Reply {
 /// `run`, at time `now` (tests move time forward without waiting).
 pub fn run_at(args: &str, snapshot: Option<Snapshot<'_>>, now: Instant) -> Reply {
     let Some(Snapshot { resolved, profile }) = snapshot else {
-        return Reply { lines: vec![LOADING.to_owned()], action: None };
+        return Reply {
+            lines: vec![LOADING.to_owned()],
+            action: None,
+        };
     };
     let mut words = args.split_whitespace();
     let verb = words.next().unwrap_or("");
     let target = words.next();
     // Any command consumes a pending reset request: only `reset confirm`, typed
     // right after and within the delay, confirms it.
-    let asked = RESET_ASKED.take().filter(|at| now.saturating_duration_since(*at) <= RESET_DELAY);
+    let asked = RESET_ASKED
+        .take()
+        .filter(|at| now.saturating_duration_since(*at) <= RESET_DELAY);
     let mut reply = Reply::default();
     let mut say = |line: String| reply.lines.push(line);
     let module = |key: Option<&str>| key.and_then(ModuleId::from_key);
@@ -69,7 +78,11 @@ pub fn run_at(args: &str, snapshot: Option<Snapshot<'_>>, now: Instant) -> Reply
         )),
         ("list", _) => {
             for d in MODULES {
-                let on = if resolved.on[d.id.index()] { "ON" } else { "off" };
+                let on = if resolved.on[d.id.index()] {
+                    "ON"
+                } else {
+                    "off"
+                };
                 say(format!("{}: {on} ({})", d.key, d.name));
             }
         }
@@ -85,7 +98,10 @@ pub fn run_at(args: &str, snapshot: Option<Snapshot<'_>>, now: Instant) -> Reply
         },
         ("reset", None | Some("all")) => {
             RESET_ASKED.set(Some(now));
-            say("Warning: ALL Horizon Essentials settings (every module, position and color)".to_owned());
+            say(
+                "Warning: ALL Horizon Essentials settings (every module, position and color)"
+                    .to_owned(),
+            );
             say("will be reset to defaults. To confirm, type within 15 seconds:".to_owned());
             say(format!("/{NAME} reset confirm"));
         }
@@ -111,10 +127,20 @@ pub fn run_at(args: &str, snapshot: Option<Snapshot<'_>>, now: Instant) -> Reply
 
 /// What the action did, for the chat (after it was applied).
 pub fn outcome(action: Action, changed: bool, resolved: &Resolved) -> String {
-    let state = |id: ModuleId| if resolved.on[id.index()] { "enabled" } else { "disabled" };
+    let state = |id: ModuleId| {
+        if resolved.on[id.index()] {
+            "enabled"
+        } else {
+            "disabled"
+        }
+    };
     match action {
-        Action::Toggle(id) | Action::Set(id, _) if changed => format!("{}: {}", id.descriptor().name, state(id)),
-        Action::Toggle(id) | Action::Set(id, _) => format!("{}: already {}", id.descriptor().name, state(id)),
+        Action::Toggle(id) | Action::Set(id, _) if changed => {
+            format!("{}: {}", id.descriptor().name, state(id))
+        }
+        Action::Toggle(id) | Action::Set(id, _) => {
+            format!("{}: already {}", id.descriptor().name, state(id))
+        }
         Action::ResetModule(id) => format!("{}: default settings", id.descriptor().name),
         Action::ResetAll => "All settings reset to defaults".to_owned(),
         // `reload` writes "configuration reloaded" itself.
@@ -130,7 +156,9 @@ fn unknown(key: &str) -> String {
 fn help(lines: &mut Vec<String>) {
     lines.push(format!("/{NAME} [status|list|help|reload]"));
     lines.push(format!("/{NAME} on|off|toggle <module>"));
-    lines.push(format!("/{NAME} reset <module>: one module; /{NAME} reset: everything (with confirmation)"));
+    lines.push(format!(
+        "/{NAME} reset <module>: one module; /{NAME} reset: everything (with confirmation)"
+    ));
 }
 
 #[cfg(test)]
@@ -144,7 +172,13 @@ mod tests {
 
     fn go(args: &str, profile: &str) -> Reply {
         let resolved = r();
-        run(args, Some(Snapshot { resolved: &resolved, profile }))
+        run(
+            args,
+            Some(Snapshot {
+                resolved: &resolved,
+                profile,
+            }),
+        )
     }
 
     #[test]
@@ -165,23 +199,48 @@ mod tests {
     #[test]
     fn status_and_list() {
         let reply = go("", "default");
-        assert_eq!(reply.lines, ["Horizon Essentials 0.1.0 - profile default - 1/1 modules enabled"]);
+        assert_eq!(
+            reply.lines,
+            ["Horizon Essentials 0.1.0 - profile default - 1/1 modules enabled"]
+        );
         assert_eq!(reply.action, None);
-        assert_eq!(go("list", "default").lines, ["status: ON (Essentials Status)"]);
+        assert_eq!(
+            go("list", "default").lines,
+            ["status: ON (Essentials Status)"]
+        );
     }
 
     #[test]
     fn actions() {
-        assert_eq!(go("off status", "d").action, Some(Action::Set(ModuleId::Status, false)));
-        assert_eq!(go("on status", "d").action, Some(Action::Set(ModuleId::Status, true)));
-        assert_eq!(go("toggle status", "d").action, Some(Action::Toggle(ModuleId::Status)));
-        assert_eq!(go("reset status", "d").action, Some(Action::ResetModule(ModuleId::Status)));
+        assert_eq!(
+            go("off status", "d").action,
+            Some(Action::Set(ModuleId::Status, false))
+        );
+        assert_eq!(
+            go("on status", "d").action,
+            Some(Action::Set(ModuleId::Status, true))
+        );
+        assert_eq!(
+            go("toggle status", "d").action,
+            Some(Action::Toggle(ModuleId::Status))
+        );
+        assert_eq!(
+            go("reset status", "d").action,
+            Some(Action::ResetModule(ModuleId::Status))
+        );
         assert_eq!(go("reload", "d").action, Some(Action::Reload));
     }
 
     fn at(args: &str, now: Instant) -> Reply {
         let resolved = r();
-        run_at(args, Some(Snapshot { resolved: &resolved, profile: "d" }), now)
+        run_at(
+            args,
+            Some(Snapshot {
+                resolved: &resolved,
+                profile: "d",
+            }),
+            now,
+        )
     }
 
     #[test]
@@ -189,11 +248,20 @@ mod tests {
         let t0 = Instant::now();
         let ask = at("reset", t0);
         assert_eq!(ask.action, None, "the request alone resets nothing");
-        assert!(ask.lines[0].contains("ALL Horizon Essentials settings"), "the warning is explicit");
+        assert!(
+            ask.lines[0].contains("ALL Horizon Essentials settings"),
+            "the warning is explicit"
+        );
         assert_eq!(ask.lines[2], "/essentials reset confirm");
-        assert_eq!(at("reset confirm", t0 + Duration::from_secs(14)).action, Some(Action::ResetAll));
+        assert_eq!(
+            at("reset confirm", t0 + Duration::from_secs(14)).action,
+            Some(Action::ResetAll)
+        );
         // The confirmation works only once.
-        assert_eq!(at("reset confirm", t0 + Duration::from_secs(15)).action, None);
+        assert_eq!(
+            at("reset confirm", t0 + Duration::from_secs(15)).action,
+            None
+        );
     }
 
     #[test]
@@ -210,7 +278,10 @@ mod tests {
         let t0 = Instant::now();
         at("reset", t0);
         at("list", t0 + Duration::from_secs(1));
-        assert_eq!(at("reset confirm", t0 + Duration::from_secs(2)).action, None);
+        assert_eq!(
+            at("reset confirm", t0 + Duration::from_secs(2)).action,
+            None
+        );
     }
 
     #[test]
@@ -222,7 +293,10 @@ mod tests {
 
     #[test]
     fn module_reset_checks_its_name() {
-        assert_eq!(go("reset status", "d").action, Some(Action::ResetModule(ModuleId::Status)));
+        assert_eq!(
+            go("reset status", "d").action,
+            Some(Action::ResetModule(ModuleId::Status))
+        );
         let reply = go("reset radar", "d");
         assert_eq!(reply.action, None);
         assert_eq!(reply.lines, ["Unknown module: radar (modules: status)"]);
@@ -231,7 +305,11 @@ mod tests {
     #[test]
     fn no_module_uses_a_reserved_word() {
         for d in MODULES {
-            assert!(!["all", "confirm"].contains(&d.key), "\"{}\" would hide /essentials reset", d.key);
+            assert!(
+                !["all", "confirm"].contains(&d.key),
+                "\"{}\" would hide /essentials reset",
+                d.key
+            );
         }
     }
 
@@ -251,7 +329,13 @@ mod tests {
         let mut c = Config::default();
         let changed = c.apply(Action::Set(ModuleId::Status, false));
         let res = c.resolve();
-        assert_eq!(outcome(Action::Set(ModuleId::Status, false), changed, &res), "Essentials Status: disabled");
-        assert_eq!(outcome(Action::Set(ModuleId::Status, false), false, &res), "Essentials Status: already disabled");
+        assert_eq!(
+            outcome(Action::Set(ModuleId::Status, false), changed, &res),
+            "Essentials Status: disabled"
+        );
+        assert_eq!(
+            outcome(Action::Set(ModuleId::Status, false), false, &res),
+            "Essentials Status: already disabled"
+        );
     }
 }

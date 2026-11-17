@@ -43,22 +43,22 @@ pub fn allocs() -> u64 {
 // not use is not an error here.
 #[allow(dead_code)]
 pub mod game {
-    #[path = "../../mixins/horizon_essentials/core_types.rs"]
-    pub mod essentials_types;
-    #[path = "../../mixins/horizon_essentials/core_registry.rs"]
-    pub mod essentials_registry;
     #[path = "../../mixins/horizon_essentials/core_config.rs"]
     pub mod essentials_config;
-    #[path = "../../mixins/horizon_essentials/core_store.rs"]
-    pub mod essentials_store;
-    #[path = "../../mixins/horizon_essentials/core_state.rs"]
-    pub mod essentials_state;
-    #[path = "../../mixins/horizon_essentials/core_events.rs"]
-    pub mod essentials_events;
     #[path = "../../mixins/horizon_essentials/ui_draw.rs"]
     pub mod essentials_draw;
+    #[path = "../../mixins/horizon_essentials/core_events.rs"]
+    pub mod essentials_events;
+    #[path = "../../mixins/horizon_essentials/core_registry.rs"]
+    pub mod essentials_registry;
+    #[path = "../../mixins/horizon_essentials/core_state.rs"]
+    pub mod essentials_state;
     #[path = "../../mixins/horizon_essentials/mod_status.rs"]
     pub mod essentials_status;
+    #[path = "../../mixins/horizon_essentials/core_store.rs"]
+    pub mod essentials_store;
+    #[path = "../../mixins/horizon_essentials/core_types.rs"]
+    pub mod essentials_types;
 }
 
 mod protocole;

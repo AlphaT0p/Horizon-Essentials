@@ -12,11 +12,17 @@ pub const MARGIN: f32 = 2.0;
 /// - automatic: attached to `anchor` (center, middle of an edge…);
 /// - free: `x` and `y` are the share of the free space, from 0 to 1.
 pub fn position(layout: &Layout, size: [f32; 2], screen: [f32; 2]) -> [f32; 2] {
-    let room = [(screen[0] - size[0]).max(0.0), (screen[1] - size[1]).max(0.0)];
+    let room = [
+        (screen[0] - size[0]).max(0.0),
+        (screen[1] - size[1]).max(0.0),
+    ];
     if layout.auto {
         anchored(layout.anchor, room)
     } else {
-        [(layout.x.clamp(0.0, 1.0) * room[0]).round(), (layout.y.clamp(0.0, 1.0) * room[1]).round()]
+        [
+            (layout.x.clamp(0.0, 1.0) * room[0]).round(),
+            (layout.y.clamp(0.0, 1.0) * room[1]).round(),
+        ]
     }
 }
 
@@ -35,16 +41,31 @@ mod tests {
     use super::*;
 
     fn layout(anchor: Anchor, auto: bool, x: f32, y: f32) -> Layout {
-        Layout { anchor, auto, x, y, scale: 100 }
+        Layout {
+            anchor,
+            auto,
+            x,
+            y,
+            scale: 100,
+        }
     }
 
     #[test]
     fn automatic_anchoring() {
         let screen = [480.0, 270.0];
         let size = [100.0, 12.0];
-        assert_eq!(position(&layout(Anchor::Center, true, 0.0, 0.0), size, screen), [190.0, 129.0]);
-        assert_eq!(position(&layout(Anchor::TopCenter, true, 0.0, 0.0), size, screen), [190.0, 2.0]);
-        assert_eq!(position(&layout(Anchor::BottomRight, true, 0.0, 0.0), size, screen), [378.0, 256.0]);
+        assert_eq!(
+            position(&layout(Anchor::Center, true, 0.0, 0.0), size, screen),
+            [190.0, 129.0]
+        );
+        assert_eq!(
+            position(&layout(Anchor::TopCenter, true, 0.0, 0.0), size, screen),
+            [190.0, 2.0]
+        );
+        assert_eq!(
+            position(&layout(Anchor::BottomRight, true, 0.0, 0.0), size, screen),
+            [378.0, 256.0]
+        );
     }
 
     #[test]

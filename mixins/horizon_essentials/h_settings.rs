@@ -6,5 +6,8 @@ fn essentials_page(game: &mut crate::game::Game<'_>, mod_id: &str, buttons: &mut
         return;
     }
     let game = &*game;
-    ev::view(|| game.native_data_dir(t::MOD_ID), |snapshot| ui::labels(snapshot, buttons));
+    ev::view(
+        || game.native_data_dir(t::MOD_ID),
+        |snapshot| ui::labels(snapshot, buttons),
+    );
 }

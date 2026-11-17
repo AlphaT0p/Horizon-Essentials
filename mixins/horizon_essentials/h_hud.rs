@@ -30,12 +30,23 @@ fn essentials_hud(
     let mut paint = |shapes: &t::Shapes, [ox, oy]: [f32; 2]| {
         for op in shapes.ops() {
             match *op {
-                t::Op::Fill { rect: [x, y, w, h], argb } => game.native_fill(batch, [ox + x, oy + y, w, h], argb),
-                t::Op::Text { slot, at: [x, y], rgb, shadow } => {
-                    game.native_text(batch, shapes.text_of(slot), [ox + x, oy + y], rgb, shadow)
-                }
+                t::Op::Fill {
+                    rect: [x, y, w, h],
+                    argb,
+                } => game.native_fill(batch, [ox + x, oy + y, w, h], argb),
+                t::Op::Text {
+                    slot,
+                    at: [x, y],
+                    rgb,
+                    shadow,
+                } => game.native_text(batch, shapes.text_of(slot), [ox + x, oy + y], rgb, shadow),
             }
         }
     };
-    ev::hud(screen, &|text| game.native_text_width(text), &mut place, &mut paint);
+    ev::hud(
+        screen,
+        &|text| game.native_text_width(text),
+        &mut place,
+        &mut paint,
+    );
 }

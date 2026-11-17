@@ -34,7 +34,10 @@ pub fn tick(dir: impl FnOnce() -> PathBuf, in_world: bool) -> Option<String> {
     state::with(dir, |s| {
         s.tick += 1;
         if s.loaded {
-            let ctx = TickCtx { tick: s.tick, in_world };
+            let ctx = TickCtx {
+                tick: s.tick,
+                in_world,
+            };
             for id in ModuleId::all() {
                 if s.resolved.on[id.index()] {
                     s.modules.get_mut(id).on_tick(&ctx);
@@ -83,9 +86,15 @@ pub struct Snapshot<'a> {
 /// Gives `f` the Core snapshot, or None while the configuration is loading
 /// (the UI then shows "Loading…" and offers no change). The result is None if
 /// the state is already borrowed.
-pub fn view<R>(dir: impl FnOnce() -> PathBuf, f: impl FnOnce(Option<Snapshot<'_>>) -> R) -> Option<R> {
+pub fn view<R>(
+    dir: impl FnOnce() -> PathBuf,
+    f: impl FnOnce(Option<Snapshot<'_>>) -> R,
+) -> Option<R> {
     state::with(dir, |s| {
-        let snapshot = s.loaded.then_some(Snapshot { resolved: &s.resolved, profile: &s.profile });
+        let snapshot = s.loaded.then_some(Snapshot {
+            resolved: &s.resolved,
+            profile: &s.profile,
+        });
         f(snapshot)
     })
 }
@@ -106,7 +115,12 @@ pub fn hud(
     paint: &mut dyn FnMut(&Shapes, [f32; 2]),
 ) {
     state::with_loaded(|s| {
-        let state::State { modules, resolved, profile, .. } = s;
+        let state::State {
+            modules,
+            resolved,
+            profile,
+            ..
+        } = s;
         let active = resolved.active_count();
         for id in ModuleId::all() {
             let i = id.index();
@@ -194,7 +208,12 @@ mod tests {
         let dir = d.0.clone();
         started(&dir);
         let mut painted = 0;
-        hud([480.0, 270.0], &|_| 10.0, &mut |_, _, _| None, &mut |_, _| painted += 1);
+        hud(
+            [480.0, 270.0],
+            &|_| 10.0,
+            &mut |_, _, _| None,
+            &mut |_, _| painted += 1,
+        );
         assert_eq!(painted, 0);
     }
 
@@ -208,7 +227,11 @@ mod tests {
         frame(|| dir.clone(), 16.0);
         let loaded = state::with_existing(|s| s.loaded).unwrap();
         draw(&mut painted);
-        assert_eq!(painted > 0, loaded, "the HUD shows nothing until the configuration has been read");
+        assert_eq!(
+            painted > 0,
+            loaded,
+            "the HUD shows nothing until the configuration has been read"
+        );
         state::with_existing(|s| s.wait_idle(WAIT));
         draw(&mut painted);
         assert!(painted > 0, "then the status box appears");
@@ -233,12 +256,21 @@ mod tests {
         // First access: the read has just been requested from the I/O thread.
         let first = view(|| dir.clone(), |snap| snap.is_some()).unwrap();
         let loaded = state::with_existing(|s| s.loaded).unwrap();
-        assert_eq!(first, loaded, "no snapshot until the configuration has been read");
+        assert_eq!(
+            first, loaded,
+            "no snapshot until the configuration has been read"
+        );
         state::with_existing(|s| s.wait_idle(WAIT));
-        let (on, profile) = view(|| dir.clone(), |snap| {
-            let snap = snap.expect("loaded");
-            (snap.resolved.on[ModuleId::Status.index()], snap.profile.to_owned())
-        })
+        let (on, profile) = view(
+            || dir.clone(),
+            |snap| {
+                let snap = snap.expect("loaded");
+                (
+                    snap.resolved.on[ModuleId::Status.index()],
+                    snap.profile.to_owned(),
+                )
+            },
+        )
         .unwrap();
         assert!(on);
         assert_eq!(profile, "default");
@@ -263,7 +295,11 @@ mod tests {
             let _ = tick(|| dir.clone(), true);
             key(|| dir.clone(), "key.mouse.left", true);
         }
-        assert_eq!(crate::allocations() - before, 0, "a frame, a tick or a key press allocated");
+        assert_eq!(
+            crate::allocations() - before,
+            0,
+            "a frame, a tick or a key press allocated"
+        );
         assert!(painted > 0);
     }
 
@@ -282,11 +318,18 @@ mod tests {
             let _ = tick(|| dir.clone(), true);
             key(|| dir.clone(), "key.keyboard.w", true);
         }
-        assert_eq!(calls(ModuleId::Status), before, "the disabled module was called");
+        assert_eq!(
+            calls(ModuleId::Status),
+            before,
+            "the disabled module was called"
+        );
         assert_eq!(painted, 0);
         assert!(apply(|| dir.clone(), Action::Set(ModuleId::Status, true)));
         draw(&mut painted);
-        assert!(calls(ModuleId::Status) > before, "re-enabled, it is called again");
+        assert!(
+            calls(ModuleId::Status) > before,
+            "re-enabled, it is called again"
+        );
     }
 
     #[test]
@@ -304,7 +347,11 @@ mod tests {
             draw(&mut painted);
         }
         assert_eq!(state::with_existing(|s| s.wait_idle(WAIT)), Some(true));
-        assert_eq!(DISK_OPS.with(|c| c.get()), before, "the game thread touched the disk");
+        assert_eq!(
+            DISK_OPS.with(|c| c.get()),
+            before,
+            "the game thread touched the disk"
+        );
         let file = crate::game::essentials_store::profile_path(&dir, "default");
         assert!(file.exists(), "the save was done, by the I/O thread");
     }

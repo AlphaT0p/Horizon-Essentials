@@ -35,7 +35,9 @@ thread_local! {
 
 /// The pending confirmation, if it has not expired.
 fn armed(now: Instant) -> bool {
-    RESET_ARMED.get().is_some_and(|at| now.saturating_duration_since(at) <= RESET_DELAY)
+    RESET_ARMED
+        .get()
+        .is_some_and(|at| now.saturating_duration_since(at) <= RESET_DELAY)
 }
 
 /// The button number `index`.
@@ -61,7 +63,11 @@ pub fn labels_at(snapshot: Option<Snapshot<'_>>, out: &mut Vec<String>, now: Ins
         return;
     };
     for d in MODULES {
-        let state = if snapshot.resolved.on[d.id.index()] { "ON" } else { "OFF" };
+        let state = if snapshot.resolved.on[d.id.index()] {
+            "ON"
+        } else {
+            "OFF"
+        };
         out.push(format!("{}: {state}", d.name));
     }
     out.push("Reload configuration".to_owned());
@@ -104,7 +110,13 @@ mod tests {
     fn labels_of(config: &Config) -> Vec<String> {
         let resolved = config.resolve();
         let mut out = Vec::new();
-        labels(Some(Snapshot { resolved: &resolved, profile: "default" }), &mut out);
+        labels(
+            Some(Snapshot {
+                resolved: &resolved,
+                profile: "default",
+            }),
+            &mut out,
+        );
         out
     }
 
@@ -113,7 +125,10 @@ mod tests {
         let out = labels_of(&Config::default());
         assert_eq!(out.len(), MODULES.len() + 2);
         for (i, d) in MODULES.iter().enumerate() {
-            assert!(out[i].starts_with(d.name), "button {i} comes from the registry");
+            assert!(
+                out[i].starts_with(d.name),
+                "button {i} comes from the registry"
+            );
         }
         assert_eq!(out[0], "Essentials Status: ON");
         assert_eq!(click(0, true), Some(Action::Toggle(ModuleId::Status)));
@@ -133,11 +148,22 @@ mod tests {
     fn reset_everything_asks_for_confirmation() {
         let reset = MODULES.len() + 1;
         click(0, true); // starts from a state with no pending confirmation
-        assert_eq!(click(reset, true), None, "first click: confirmation is requested");
-        assert_eq!(labels_of(&Config::default())[reset], "Confirm (15 s): reset ALL settings to defaults?");
+        assert_eq!(
+            click(reset, true),
+            None,
+            "first click: confirmation is requested"
+        );
+        assert_eq!(
+            labels_of(&Config::default())[reset],
+            "Confirm (15 s): reset ALL settings to defaults?"
+        );
         assert_eq!(click(reset, true), Some(Action::ResetAll));
         assert_eq!(click(reset, true), None, "the confirmation works only once");
-        assert_eq!(click(0, true), Some(Action::Toggle(ModuleId::Status)), "another click cancels");
+        assert_eq!(
+            click(0, true),
+            Some(Action::Toggle(ModuleId::Status)),
+            "another click cancels"
+        );
         assert_eq!(click(reset, true), None);
     }
 
@@ -150,9 +176,26 @@ mod tests {
         let later = t0 + Duration::from_secs(16);
         let resolved = Config::default().resolve();
         let mut out = Vec::new();
-        labels_at(Some(Snapshot { resolved: &resolved, profile: "default" }), &mut out, later);
-        assert_eq!(out[reset], "Reset everything", "the label goes back to normal after the delay");
-        assert_eq!(click_at(reset, true, later), None, "a late click asks for confirmation again");
-        assert_eq!(click_at(reset, true, later + Duration::from_secs(1)), Some(Action::ResetAll));
+        labels_at(
+            Some(Snapshot {
+                resolved: &resolved,
+                profile: "default",
+            }),
+            &mut out,
+            later,
+        );
+        assert_eq!(
+            out[reset], "Reset everything",
+            "the label goes back to normal after the delay"
+        );
+        assert_eq!(
+            click_at(reset, true, later),
+            None,
+            "a late click asks for confirmation again"
+        );
+        assert_eq!(
+            click_at(reset, true, later + Duration::from_secs(1)),
+            Some(Action::ResetAll)
+        );
     }
 }

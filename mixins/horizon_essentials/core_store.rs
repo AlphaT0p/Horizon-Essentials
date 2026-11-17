@@ -37,7 +37,9 @@ pub struct Loaded {
 /// A profile name that is safe as a file name: 1 to 32 characters `a-z`, `0-9`, `_`, `-`.
 pub fn valid_profile_name(name: &str) -> bool {
     (1..=32).contains(&name.len())
-        && name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
+        && name
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
 }
 
 pub fn profile_path(dir: &Path, profile: &str) -> PathBuf {
@@ -54,7 +56,9 @@ pub fn load(dir: &Path) -> Loaded {
             if valid_profile_name(name) {
                 name.to_owned()
             } else {
-                warnings.push(format!("invalid active profile ({name:?}): using profile \"{DEFAULT_PROFILE}\""));
+                warnings.push(format!(
+                    "invalid active profile ({name:?}): using profile \"{DEFAULT_PROFILE}\""
+                ));
                 DEFAULT_PROFILE.to_owned()
             }
         }
@@ -76,11 +80,17 @@ pub fn load(dir: &Path) -> Loaded {
         // First launch: no file, no warning.
         Err(e) if e.kind() == io::ErrorKind::NotFound => Config::default(),
         Err(e) => {
-            warnings.push(format!("unreadable profile \"{profile}\" ({e}): default values"));
+            warnings.push(format!(
+                "unreadable profile \"{profile}\" ({e}): default values"
+            ));
             Config::default()
         }
     };
-    Loaded { profile, config, warnings }
+    Loaded {
+        profile,
+        config,
+        warnings,
+    }
 }
 
 /// Writes the profile, and `active` if it changed.
@@ -93,7 +103,10 @@ pub fn save_json(dir: &Path, profile: &str, json: &str) -> io::Result<()> {
     count_disk_op();
     write_atomic(&profile_path(dir, profile), json.as_bytes())?;
     let active = dir.join("active");
-    if fs::read_to_string(&active).map(|a| a.trim() != profile).unwrap_or(true) {
+    if fs::read_to_string(&active)
+        .map(|a| a.trim() != profile)
+        .unwrap_or(true)
+    {
         write_atomic(&active, profile.as_bytes())?;
     }
     Ok(())
@@ -161,8 +174,15 @@ impl SaveTimer {
 /// A request to the I/O thread.
 #[derive(Debug)]
 pub enum Request {
-    Load { dir: PathBuf },
-    Save { dir: PathBuf, profile: String, json: String, seq: u64 },
+    Load {
+        dir: PathBuf,
+    },
+    Save {
+        dir: PathBuf,
+        profile: String,
+        json: String,
+        seq: u64,
+    },
     Stop,
 }
 
@@ -192,7 +212,11 @@ impl Io {
             .name("Essentials I/O".into())
             .spawn(move || worker(requests, replies))
             .ok()?;
-        Some(Io { tx, rx, handle: Some(handle) })
+        Some(Io {
+            tx,
+            rx,
+            handle: Some(handle),
+        })
     }
 
     /// Sends a request. If the thread is gone, the request is handed back
@@ -249,18 +273,31 @@ fn worker(requests: Receiver<Request>, replies: Sender<Reply>) {
                     return;
                 }
                 Request::Load { dir } => {
-                    let loaded = catch_unwind(AssertUnwindSafe(|| load(dir))).unwrap_or_else(|_| Loaded {
-                        profile: DEFAULT_PROFILE.to_owned(),
-                        config: Config::default(),
-                        warnings: vec!["internal error while reading: default values".to_owned()],
-                    });
+                    let loaded =
+                        catch_unwind(AssertUnwindSafe(|| load(dir))).unwrap_or_else(|_| Loaded {
+                            profile: DEFAULT_PROFILE.to_owned(),
+                            config: Config::default(),
+                            warnings: vec![
+                                "internal error while reading: default values".to_owned(),
+                            ],
+                        });
                     Reply::Loaded(loaded)
                 }
-                Request::Save { dir, profile, json, seq } => {
+                Request::Save {
+                    dir,
+                    profile,
+                    json,
+                    seq,
+                } => {
                     if superseded(&batch[i + 1..], dir, profile) {
-                        Reply::Saved { seq: *seq, error: None }
+                        Reply::Saved {
+                            seq: *seq,
+                            error: None,
+                        }
                     } else {
-                        let error = match catch_unwind(AssertUnwindSafe(|| save_json(dir, profile, json))) {
+                        let error = match catch_unwind(AssertUnwindSafe(|| {
+                            save_json(dir, profile, json)
+                        })) {
                             Ok(Ok(())) => None,
                             Ok(Err(e)) => Some(e.to_string()),
                             Err(_) => Some("internal error while writing".to_owned()),
@@ -281,7 +318,9 @@ fn superseded(later: &[Request], dir: &Path, profile: &str) -> bool {
     for r in later {
         match r {
             Request::Load { .. } | Request::Stop => return false,
-            Request::Save { dir: d, profile: p, .. } if d == dir && p == profile => return true,
+            Request::Save {
+                dir: d, profile: p, ..
+            } if d == dir && p == profile => return true,
             Request::Save { .. } => {}
         }
     }
@@ -312,7 +351,8 @@ pub(crate) mod tests {
     pub(crate) struct TempDir(pub PathBuf);
     impl TempDir {
         pub(crate) fn new(name: &str) -> TempDir {
-            let dir = std::env::temp_dir().join(format!("horizon-essentials-{name}-{}", std::process::id()));
+            let dir = std::env::temp_dir()
+                .join(format!("horizon-essentials-{name}-{}", std::process::id()));
             let _ = fs::remove_dir_all(&dir);
             fs::create_dir_all(&dir).unwrap();
             TempDir(dir)
@@ -340,7 +380,12 @@ pub(crate) mod tests {
         c.apply(Action::Toggle(ModuleId::Status));
         save(&d.0, "pvp", &c).unwrap();
         assert_eq!(fs::read_to_string(d.0.join("active")).unwrap(), "pvp");
-        assert!(!profile_path(&d.0, "pvp").with_extension("json.tmp").exists(), "no leftover temporary file");
+        assert!(
+            !profile_path(&d.0, "pvp")
+                .with_extension("json.tmp")
+                .exists(),
+            "no leftover temporary file"
+        );
         let l = load(&d.0);
         assert_eq!((l.profile.as_str(), &l.config), ("pvp", &c));
         assert!(l.warnings.is_empty());
@@ -355,7 +400,10 @@ pub(crate) mod tests {
         let l = load(&d.0);
         assert_eq!(l.config, Config::default());
         assert_eq!(l.warnings.len(), 2, "{:?}", l.warnings);
-        assert_eq!(fs::read_to_string(path.with_extension("json.bak")).unwrap(), "{ this is not JSON");
+        assert_eq!(
+            fs::read_to_string(path.with_extension("json.bak")).unwrap(),
+            "{ this is not JSON"
+        );
         assert!(path.exists(), "the original is never deleted when reading");
     }
 
@@ -378,15 +426,27 @@ pub(crate) mod tests {
         let mut c = Config::default();
         for seq in 1..=100 {
             c.apply(Action::Toggle(ModuleId::Status));
-            let save = Request::Save { dir: d.0.clone(), profile: "default".into(), json: c.to_json(), seq };
+            let save = Request::Save {
+                dir: d.0.clone(),
+                profile: "default".into(),
+                json: c.to_json(),
+                seq,
+            };
             assert!(io.send(save).is_ok());
         }
         // A read after the writes sees the last one (order is kept).
         assert!(io.send(Request::Load { dir: d.0.clone() }).is_ok());
         let replies = io.finish(Duration::from_secs(5));
-        let saved = replies.iter().filter(|r| matches!(r, Reply::Saved { .. })).count();
+        let saved = replies
+            .iter()
+            .filter(|r| matches!(r, Reply::Saved { .. }))
+            .count();
         assert_eq!(saved, 100, "every request gets its reply");
-        assert!(replies.iter().all(|r| !matches!(r, Reply::Saved { error: Some(_), .. })));
+        assert!(
+            replies
+                .iter()
+                .all(|r| !matches!(r, Reply::Saved { error: Some(_), .. }))
+        );
         let Some(Reply::Loaded(l)) = replies.iter().find(|r| matches!(r, Reply::Loaded(_))) else {
             panic!("no read");
         };
@@ -395,12 +455,25 @@ pub(crate) mod tests {
 
     #[test]
     fn a_save_is_skipped_only_if_a_newer_one_follows_without_a_read() {
-        let save = |p: &str| Request::Save { dir: PathBuf::from("d"), profile: p.into(), json: String::new(), seq: 0 };
-        let load = Request::Load { dir: PathBuf::from("d") };
+        let save = |p: &str| Request::Save {
+            dir: PathBuf::from("d"),
+            profile: p.into(),
+            json: String::new(),
+            seq: 0,
+        };
+        let load = Request::Load {
+            dir: PathBuf::from("d"),
+        };
         let d = Path::new("d");
         assert!(superseded(&[save("default")], d, "default"));
-        assert!(!superseded(&[save("pvp")], d, "default"), "another profile replaces nothing");
-        assert!(!superseded(&[load, save("default")], d, "default"), "a read in between");
+        assert!(
+            !superseded(&[save("pvp")], d, "default"),
+            "another profile replaces nothing"
+        );
+        assert!(
+            !superseded(&[load, save("default")], d, "default"),
+            "a read in between"
+        );
         assert!(!superseded(&[], d, "default"));
     }
 
@@ -410,7 +483,12 @@ pub(crate) mod tests {
         let io = Io::spawn().expect("I/O thread");
         let mut c = Config::default();
         c.apply(Action::Toggle(ModuleId::Status));
-        let save = Request::Save { dir: d.0.clone(), profile: "default".into(), json: c.to_json(), seq: 1 };
+        let save = Request::Save {
+            dir: d.0.clone(),
+            profile: "default".into(),
+            json: c.to_json(),
+            seq: 1,
+        };
         assert!(io.send(save).is_ok());
         io.finish(Duration::from_secs(5));
         assert_eq!(load(&d.0).config, c, "written before `finish` returns");

@@ -6,5 +6,8 @@ fn essentials_frame(game: &mut crate::game::Game<'_>, elapsed: std::time::Durati
         return;
     }
     let game = &*game;
-    ev::frame(|| game.native_data_dir(t::MOD_ID), elapsed.as_secs_f32() * 1000.0);
+    ev::frame(
+        || game.native_data_dir(t::MOD_ID),
+        elapsed.as_secs_f32() * 1000.0,
+    );
 }

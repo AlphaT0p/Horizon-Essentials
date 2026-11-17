@@ -90,7 +90,11 @@ impl Resolved {
 
 impl Default for Style {
     fn default() -> Self {
-        Style { background: DEFAULT_BACKGROUND, text: DEFAULT_TEXT.to_owned(), shadow: true }
+        Style {
+            background: DEFAULT_BACKGROUND,
+            text: DEFAULT_TEXT.to_owned(),
+            shadow: true,
+        }
     }
 }
 
@@ -107,20 +111,36 @@ impl Style {
 
 impl Layout {
     pub fn default_for(d: &Descriptor) -> Layout {
-        Layout { anchor: d.default_anchor, auto: true, x: 0.0, y: 0.0, scale: 100 }
+        Layout {
+            anchor: d.default_anchor,
+            auto: true,
+            x: 0.0,
+            y: 0.0,
+            scale: 100,
+        }
     }
 }
 
 impl ModuleConfig {
     pub fn default_for(d: &Descriptor) -> ModuleConfig {
-        ModuleConfig { on: d.default_on, layout: Layout::default_for(d), style: Style::default() }
+        ModuleConfig {
+            on: d.default_on,
+            layout: Layout::default_for(d),
+            style: Style::default(),
+        }
     }
 
     /// For a module this registry does not know.
     fn default_unknown() -> ModuleConfig {
         ModuleConfig {
             on: false,
-            layout: Layout { anchor: Anchor::TopLeft, auto: true, x: 0.0, y: 0.0, scale: 100 },
+            layout: Layout {
+                anchor: Anchor::TopLeft,
+                auto: true,
+                x: 0.0,
+                y: 0.0,
+                scale: 100,
+            },
             style: Style::default(),
         }
     }
@@ -132,7 +152,10 @@ impl Default for Config {
             .iter()
             .map(|d| (d.key.to_owned(), ModuleConfig::default_for(d)))
             .collect();
-        Config { version: CONFIG_VERSION, modules }
+        Config {
+            version: CONFIG_VERSION,
+            modules,
+        }
     }
 }
 
@@ -180,7 +203,9 @@ impl Config {
                 m.on = !m.on;
             }
             Action::Set(id, on) => self.module_mut(id).on = on,
-            Action::ResetModule(id) => *self.module_mut(id) = ModuleConfig::default_for(id.descriptor()),
+            Action::ResetModule(id) => {
+                *self.module_mut(id) = ModuleConfig::default_for(id.descriptor())
+            }
             Action::ResetAll => *self = Config::default(),
             Action::Reload => {}
         }
@@ -199,7 +224,8 @@ impl Config {
         let root = match serde_json::from_str::<Value>(text) {
             Ok(Value::Object(root)) => root,
             Ok(_) => {
-                warnings.push("invalid configuration (not a JSON object): default values".to_owned());
+                warnings
+                    .push("invalid configuration (not a JSON object): default values".to_owned());
                 return (Config::default(), warnings);
             }
             Err(e) => {
@@ -214,7 +240,10 @@ impl Config {
             Some(_) => {}
             None => warnings.push("configuration without a version: read as version 1".to_owned()),
         }
-        let mut config = Config { version: CONFIG_VERSION, modules: BTreeMap::new() };
+        let mut config = Config {
+            version: CONFIG_VERSION,
+            modules: BTreeMap::new(),
+        };
         match root.get("modules") {
             Some(Value::Object(modules)) => {
                 for (key, value) in modules {
@@ -248,7 +277,12 @@ pub fn parse_rgb(text: &str) -> Option<u32> {
     u32::from_str_radix(hex, 16).ok()
 }
 
-fn read_module(key: &str, value: &Value, default: ModuleConfig, warnings: &mut Vec<String>) -> ModuleConfig {
+fn read_module(
+    key: &str,
+    value: &Value,
+    default: ModuleConfig,
+    warnings: &mut Vec<String>,
+) -> ModuleConfig {
     let Value::Object(fields) = value else {
         warnings.push(format!("{key}: invalid settings, default values"));
         return default;
@@ -274,7 +308,9 @@ fn read_module(key: &str, value: &Value, default: ModuleConfig, warnings: &mut V
                 scale: match l.get("scale") {
                     None => d.scale,
                     Some(v) => match v.as_u64() {
-                        Some(s) if (u64::from(SCALE_MIN)..=u64::from(SCALE_MAX)).contains(&s) => s as u16,
+                        Some(s) if (u64::from(SCALE_MIN)..=u64::from(SCALE_MAX)).contains(&s) => {
+                            s as u16
+                        }
                         _ => {
                             fix("layout.scale");
                             d.scale
@@ -403,18 +439,28 @@ mod tests {
     fn an_unknown_module_is_kept_and_a_missing_module_is_added() {
         let text = r#"{ "version": 1, "modules": { "future": { "on": true } } }"#;
         let (c, _) = Config::parse(text);
-        assert!(c.modules["future"].on, "the module from a newer version survives");
-        assert_eq!(c.modules["status"], ModuleConfig::default_for(ModuleId::Status.descriptor()));
+        assert!(
+            c.modules["future"].on,
+            "the module from a newer version survives"
+        );
+        assert_eq!(
+            c.modules["status"],
+            ModuleConfig::default_for(ModuleId::Status.descriptor())
+        );
         let (again, _) = Config::parse(&c.to_json());
         assert_eq!(again, c);
     }
 
     #[test]
     fn a_newer_version_is_read_as_well_as_possible() {
-        let (c, warnings) = Config::parse(r#"{ "version": 7, "modules": { "status": { "on": false } } }"#);
+        let (c, warnings) =
+            Config::parse(r#"{ "version": 7, "modules": { "status": { "on": false } } }"#);
         assert!(!c.modules["status"].on);
         assert_eq!(warnings.len(), 1);
-        assert_eq!(c.version, CONFIG_VERSION, "rewritten in this version's format");
+        assert_eq!(
+            c.version, CONFIG_VERSION,
+            "rewritten in this version's format"
+        );
     }
 
     #[test]
@@ -424,7 +470,10 @@ mod tests {
         let on = c.module(id).on;
         assert!(c.apply(Action::Toggle(id)));
         assert_eq!(c.module(id).on, !on);
-        assert!(!c.apply(Action::Set(id, !on)), "already in that state: nothing changes");
+        assert!(
+            !c.apply(Action::Set(id, !on)),
+            "already in that state: nothing changes"
+        );
         assert!(c.apply(Action::ResetModule(id)));
         assert_eq!(c.module(id).on, on);
         c.apply(Action::Toggle(id));
@@ -436,11 +485,17 @@ mod tests {
     #[test]
     fn resolved_style() {
         let s = Style::default().resolve();
-        assert_eq!(s.background, 0x7800_0000, "47 % = the alpha of Horizon's boxes");
+        assert_eq!(
+            s.background, 0x7800_0000,
+            "47 % = the alpha of Horizon's boxes"
+        );
         assert_eq!(s.text, 0xFF_FFFF);
         assert_eq!(parse_rgb("#55ff55"), Some(0x55FF55));
         assert_eq!(parse_rgb("12345"), None);
         let r = Config::default().resolve();
-        assert_eq!(r.active_count(), MODULES.iter().filter(|d| d.default_on).count());
+        assert_eq!(
+            r.active_count(),
+            MODULES.iter().filter(|d| d.default_on).count()
+        );
     }
 }

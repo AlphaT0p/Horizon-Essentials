@@ -39,9 +39,11 @@ impl Module for Status {
             let w = (ctx.measure)(&self.line) + 4.0;
             self.shapes.clear();
             if ctx.style.background >> 24 != 0 {
-                self.shapes.fill([0.0, 0.0, w, LINE_HEIGHT], ctx.style.background);
+                self.shapes
+                    .fill([0.0, 0.0, w, LINE_HEIGHT], ctx.style.background);
             }
-            self.shapes.text(&self.line, [2.0, 2.0], ctx.style.text, ctx.style.shadow);
+            self.shapes
+                .text(&self.line, [2.0, 2.0], ctx.style.text, ctx.style.shadow);
             self.shapes.set_size([w, LINE_HEIGHT]);
             self.built = Some(key);
             self.built_profile.clear();
@@ -58,8 +60,18 @@ mod tests {
     use crate::game::essentials_config::Style;
     use crate::game::essentials_types::Op;
 
-    fn ctx<'a>(measure: &'a dyn Fn(&str) -> f32, profile: &'a str, style: ResolvedStyle) -> WidgetCtx<'a> {
-        WidgetCtx { measure, style, profile, active_modules: 1, total_modules: 1 }
+    fn ctx<'a>(
+        measure: &'a dyn Fn(&str) -> f32,
+        profile: &'a str,
+        style: ResolvedStyle,
+    ) -> WidgetCtx<'a> {
+        WidgetCtx {
+            measure,
+            style,
+            profile,
+            active_modules: 1,
+            total_modules: 1,
+        }
     }
 
     #[test]
@@ -70,7 +82,13 @@ mod tests {
         let shapes = m.widget(&ctx(&measure, "default", style)).unwrap();
         assert_eq!(shapes.text_of(0), "Essentials 0.1.0 - default - 1/1");
         assert_eq!(shapes.size(), [6.0 * 32.0 + 4.0, LINE_HEIGHT]);
-        assert!(matches!(shapes.ops()[0], Op::Fill { argb: 0x7800_0000, .. }));
+        assert!(matches!(
+            shapes.ops()[0],
+            Op::Fill {
+                argb: 0x7800_0000,
+                ..
+            }
+        ));
         for _ in 0..100 {
             m.widget(&ctx(&measure, "default", style));
         }
@@ -85,7 +103,11 @@ mod tests {
     #[test]
     fn no_background_no_rectangle() {
         let measure = |_: &str| 10.0;
-        let style = Style { background: 0, ..Style::default() }.resolve();
+        let style = Style {
+            background: 0,
+            ..Style::default()
+        }
+        .resolve();
         let mut m = Status::default();
         let shapes = m.widget(&ctx(&measure, "default", style)).unwrap();
         assert_eq!(shapes.ops().len(), 1);

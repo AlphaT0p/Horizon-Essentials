@@ -113,8 +113,16 @@ mod tests {
     fn keys_are_unique_and_valid() {
         for (i, d) in MODULES.iter().enumerate() {
             assert!(!d.key.is_empty());
-            assert!(d.key.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'));
-            assert!(MODULES[i + 1..].iter().all(|o| o.key != d.key), "duplicate key: {}", d.key);
+            assert!(
+                d.key
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
+            );
+            assert!(
+                MODULES[i + 1..].iter().all(|o| o.key != d.key),
+                "duplicate key: {}",
+                d.key
+            );
             assert_eq!(ModuleId::from_key(d.key), Some(d.id));
         }
         assert_eq!(ModuleId::from_key("unknown"), None);

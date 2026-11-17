@@ -10,7 +10,9 @@
 //     duration of that frame. 20 runs.
 
 use crate::allocs;
-use crate::game::{essentials_events as ev, essentials_registry::ModuleId, essentials_types::Action};
+use crate::game::{
+    essentials_events as ev, essentials_registry::ModuleId, essentials_types::Action,
+};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -51,10 +53,16 @@ pub fn run() {
         for _ in 0..n {
             frame_and_hud(&d, sink);
         }
-        (t.elapsed().as_nanos() as f64 / n as f64, (allocs() - a0) as f64 / n as f64)
+        (
+            t.elapsed().as_nanos() as f64 / n as f64,
+            (allocs() - a0) as f64 / n as f64,
+        )
     };
     let (on_ns, on_allocs) = measure(&mut sink);
-    assert!(ev::apply(|| d.clone(), Action::Set(ModuleId::Status, false)));
+    assert!(ev::apply(
+        || d.clone(),
+        Action::Set(ModuleId::Status, false)
+    ));
     // Let the save of this change happen before measuring.
     let t = Instant::now();
     while t.elapsed() < Duration::from_millis(1500) {
@@ -85,7 +93,10 @@ pub fn run() {
             if now != before && !now.is_empty() {
                 break;
             }
-            assert!(start.elapsed() < Duration::from_secs(10), "not saved (run {i})");
+            assert!(
+                start.elapsed() < Duration::from_secs(10),
+                "not saved (run {i})"
+            );
             std::thread::sleep(Duration::from_micros(200));
         }
         worst.push(max.as_secs_f64() * 1e6);
@@ -105,9 +116,15 @@ pub fn run() {
         first.push(us);
     }
 
-    println!("PROTOCOL P1 frame+HUD status enabled  : {on_ns:.1} ns/frame, {on_allocs} alloc/frame");
-    println!("PROTOCOL P1 frame+HUD status disabled : {off_ns:.1} ns/frame, {off_allocs} alloc/frame");
-    println!("PROTOCOL P2 tick                      : {tick_ns:.1} ns/tick, {tick_allocs} alloc/tick");
+    println!(
+        "PROTOCOL P1 frame+HUD status enabled  : {on_ns:.1} ns/frame, {on_allocs} alloc/frame"
+    );
+    println!(
+        "PROTOCOL P1 frame+HUD status disabled : {off_ns:.1} ns/frame, {off_allocs} alloc/frame"
+    );
+    println!(
+        "PROTOCOL P2 tick                      : {tick_ns:.1} ns/tick, {tick_allocs} alloc/tick"
+    );
     println!(
         "PROTOCOL P3 worst frame during a save : median {:.0} µs, max {:.0} µs",
         median(worst.clone()),
