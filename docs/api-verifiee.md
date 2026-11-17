@@ -12,7 +12,8 @@ Nothing here is assumed: if a function is not in these tables, it has not been v
 | `native_tick` | `(&mut self)` | deferred saving, memory once per second (check `native_window()`) |
 | `native_hud` | `(&mut self, batch: &mut HudBatch, corners: &mut Corners)` | widget drawing |
 | `native_key` | `(&mut self, key: &str, pressed: bool)` | clicks (`key.mouse.left/right`), keys |
-| `native_command` | `(…, command: &str, ran: &mut bool)` | `/essentials …` |
+| `native_command` | `(&mut self, command: &str, ran: &mut bool)` — every `/…` line reaches it before the server (`client_mod_command`, `game/chat.rs`) | `/essentials …` |
+| `native_commands` | `(&mut self, commands: &mut Vec<&'static str>)` — API 35; asked once per connection, the names join the chat's command tree (coloured, completed, rest of the line passed to `native_command`) | `essentials` known by the chat |
 | `native_mods` | `(&mut self, mods: &mut Vec<NativeMod>)` | entry in Options > Mods |
 | `native_settings` | `(&mut self, mod_id: &str, buttons: &mut Vec<String>)` | settings page (labels) |
 | `native_settings_click` | `(&mut self, mod_id: &str, button: usize)` | click on a button |

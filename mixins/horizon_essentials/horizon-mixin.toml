@@ -145,6 +145,16 @@ bindings = [
 ]
 
 [[injection]]
+id = "commands"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_commands"
+helper = "h_commands.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "commands", ty = "&mut Vec<&'static str>", value = "&mut *commands" },
+]
+
+[[injection]]
 id = "stopping"
 kind = "HEAD"
 target = "horizon_client::game::native_hooks::Game<'_>::native_client_stopping"

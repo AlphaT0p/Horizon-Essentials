@@ -28,7 +28,13 @@
 | `core_events.rs` | `essentials_events` | frame / tick / key / apply / hud / shutdown: the helpers' only entry point |
 | `ui_draw.rs` | `essentials_draw` | automatic placement (anchors) or free placement (fractions of the free space) |
 | `mod_status.rs` | `essentials_status` | status module |
+| `ui_settings.rs` | `essentials_settings` | Options > Mods settings page: labels from the registry, click → `Action` |
+| `ui_command.rs` | `essentials_command` | `/essentials`: chat lines and an `Action`, module names from the registry |
 | `h_list.rs` | hook `native_mods` | entry in Options > Mods |
+| `h_settings.rs` | hook `native_settings` | the settings page labels |
+| `h_click.rs` | hook `native_settings_click` | a click on the settings page |
+| `h_command.rs` | hook `native_command` | runs `/essentials` |
+| `h_commands.rs` | hook `native_commands` | registers `essentials` in the chat's command tree |
 | `h_frame.rs` | hook `native_frame` | elapsed time, replies from the I/O thread |
 | `h_tick.rs` | hook `native_tick` | modules, Core messages in the chat |
 | `h_key.rs` | hook `native_key` | keys and mouse buttons |

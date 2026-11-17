@@ -2,14 +2,19 @@
 // Like the settings page, it changes nothing itself: it returns lines for the
 // chat and, when needed, an `Action` that the Core applies.
 //
-//   /essentials                      status (version, profile, enabled modules)
-//   /essentials list                 the modules
-//   /essentials on|off|toggle <mod>  enable, disable, toggle
+//   /essentials, /essentials help    this help
+//   /essentials status               version, profile, enabled modules
+//   /essentials list                 the modules, their state and description
+//   /essentials enable <mod>         enable a module (short form: on)
+//   /essentials disable <mod>        disable a module (short form: off)
+//   /essentials toggle <mod>         switch a module
 //   /essentials reset                reset EVERYTHING to defaults, after confirmation:
 //   /essentials reset confirm          to be typed within 15 seconds
 //   /essentials reset <mod>          a single module
 //   /essentials reload               read the configuration again
-//   /essentials help                 this help
+//
+// Module names come from the registry (`MODULES`): a new module is accepted
+// without changing this file.
 
 use std::cell::Cell;
 use std::time::{Duration, Instant};
@@ -63,6 +68,7 @@ pub fn run_at(args: &str, snapshot: Option<Snapshot<'_>>, now: Instant) -> Reply
     let mut words = args.split_whitespace();
     let verb = words.next().unwrap_or("");
     let target = words.next();
+    let extra = words.next();
     // Any command consumes a pending reset request: only `reset confirm`, typed
     // right after and within the delay, confirms it.
     let asked = RESET_ASKED
@@ -70,32 +76,40 @@ pub fn run_at(args: &str, snapshot: Option<Snapshot<'_>>, now: Instant) -> Reply
         .filter(|at| now.saturating_duration_since(*at) <= RESET_DELAY);
     let mut reply = Reply::default();
     let mut say = |line: String| reply.lines.push(line);
-    let module = |key: Option<&str>| key.and_then(ModuleId::from_key);
     match (verb, target) {
-        ("", _) | ("status", _) => say(format!(
+        _ if extra.is_some() => say(too_many(args)),
+        ("" | "help", None) => help(&mut reply.lines),
+        ("status", None) => say(format!(
             "Horizon Essentials {VERSION} - profile {profile} - {}/{COUNT} modules enabled",
             resolved.active_count()
         )),
-        ("list", _) => {
+        ("list", None) => {
             for d in MODULES {
                 let on = if resolved.on[d.id.index()] {
                     "ON"
                 } else {
                     "off"
                 };
-                say(format!("{}: {on} ({})", d.key, d.name));
+                say(format!("{}: {on} - {}: {}", d.key, d.name, d.description));
             }
         }
-        ("on" | "off" | "toggle", Some(key)) => match module(Some(key)) {
-            Some(id) => {
-                reply.action = Some(match verb {
-                    "on" => Action::Set(id, true),
-                    "off" => Action::Set(id, false),
-                    _ => Action::Toggle(id),
-                });
+        // `on` and `off` are kept as short forms of `enable` and `disable`.
+        ("enable" | "on" | "disable" | "off" | "toggle", Some(key)) => {
+            match ModuleId::from_key(key) {
+                Some(id) => {
+                    reply.action = Some(match verb {
+                        "enable" | "on" => Action::Set(id, true),
+                        "disable" | "off" => Action::Set(id, false),
+                        _ => Action::Toggle(id),
+                    });
+                }
+                None => say(unknown(key)),
             }
-            None => say(unknown(key)),
-        },
+        }
+        ("enable" | "on" | "disable" | "off" | "toggle", None) => say(format!(
+            "Missing module name: /{NAME} {verb} <module> (modules: {})",
+            module_keys()
+        )),
         ("reset", None | Some("all")) => {
             RESET_ASKED.set(Some(now));
             say(
@@ -111,12 +125,12 @@ pub fn run_at(args: &str, snapshot: Option<Snapshot<'_>>, now: Instant) -> Reply
                 "No reset to confirm (no request, or more than 15 seconds ago). Type /{NAME} reset first."
             )),
         },
-        ("reset", Some(key)) => match module(Some(key)) {
+        ("reset", Some(key)) => match ModuleId::from_key(key) {
             Some(id) => reply.action = Some(Action::ResetModule(id)),
             None => say(unknown(key)),
         },
-        ("reload", _) => reply.action = Some(Action::Reload),
-        ("help", _) => help(&mut reply.lines),
+        ("reload", None) => reply.action = Some(Action::Reload),
+        ("help" | "status" | "list" | "reload", Some(_)) => say(too_many(args)),
         _ => {
             say(format!("Unknown command: /{NAME} {args}"));
             help(&mut reply.lines);
@@ -148,14 +162,23 @@ pub fn outcome(action: Action, changed: bool, resolved: &Resolved) -> String {
     }
 }
 
-fn unknown(key: &str) -> String {
+/// The module names the commands accept, from the registry.
+fn module_keys() -> String {
     let keys: Vec<&str> = MODULES.iter().map(|d| d.key).collect();
-    format!("Unknown module: {key} (modules: {})", keys.join(", "))
+    keys.join(", ")
+}
+
+fn unknown(key: &str) -> String {
+    format!("Unknown module: {key} (modules: {})", module_keys())
+}
+
+fn too_many(args: &str) -> String {
+    format!("Too many arguments: /{NAME} {args} (see /{NAME} help)")
 }
 
 fn help(lines: &mut Vec<String>) {
-    lines.push(format!("/{NAME} [status|list|help|reload]"));
-    lines.push(format!("/{NAME} on|off|toggle <module>"));
+    lines.push(format!("/{NAME} help|status|list|reload"));
+    lines.push(format!("/{NAME} enable|disable|toggle <module>"));
     lines.push(format!(
         "/{NAME} reset <module>: one module; /{NAME} reset: everything (with confirmation)"
     ));
@@ -197,8 +220,17 @@ mod tests {
     }
 
     #[test]
-    fn status_and_list() {
+    fn the_bare_command_shows_help() {
         let reply = go("", "default");
+        assert_eq!(reply.action, None);
+        assert_eq!(reply.lines, go("help", "default").lines);
+        assert_eq!(reply.lines.len(), 3);
+        assert!(reply.lines[1].contains("enable|disable|toggle <module>"));
+    }
+
+    #[test]
+    fn status_and_list() {
+        let reply = go("status", "default");
         assert_eq!(
             reply.lines,
             ["Horizon Essentials 0.1.0 - profile default - 1/1 modules enabled"]
@@ -206,12 +238,45 @@ mod tests {
         assert_eq!(reply.action, None);
         assert_eq!(
             go("list", "default").lines,
-            ["status: ON (Essentials Status)"]
+            [
+                "status: ON - Essentials Status: A small box showing that the Core is running, with the active profile."
+            ]
         );
     }
 
     #[test]
+    fn list_shows_every_registry_module_with_its_state() {
+        let mut config = Config::default();
+        config.apply(Action::Set(ModuleId::Status, false));
+        let resolved = config.resolve();
+        let snapshot = Some(Snapshot {
+            resolved: &resolved,
+            profile: "d",
+        });
+        let lines = run("list", snapshot).lines;
+        assert_eq!(lines.len(), MODULES.len());
+        for (line, d) in lines.iter().zip(MODULES) {
+            assert!(line.starts_with(d.key), "{line}");
+            assert!(line.contains(d.name) && line.contains(d.description));
+            let expected = if resolved.on[d.id.index()] {
+                ": ON"
+            } else {
+                ": off"
+            };
+            assert!(line.contains(expected), "{line}");
+        }
+    }
+
+    #[test]
     fn actions() {
+        assert_eq!(
+            go("enable status", "d").action,
+            Some(Action::Set(ModuleId::Status, true))
+        );
+        assert_eq!(
+            go("disable status", "d").action,
+            Some(Action::Set(ModuleId::Status, false))
+        );
         assert_eq!(
             go("off status", "d").action,
             Some(Action::Set(ModuleId::Status, false))
@@ -314,14 +379,43 @@ mod tests {
     }
 
     #[test]
-    fn errors_without_action() {
-        let reply = go("off radar", "d");
-        assert_eq!(reply.action, None);
-        assert_eq!(reply.lines, ["Unknown module: radar (modules: status)"]);
+    fn unknown_modules_change_nothing() {
+        for args in ["enable radar", "disable radar", "toggle radar", "off radar"] {
+            let reply = go(args, "d");
+            assert_eq!(reply.action, None, "{args}");
+            assert_eq!(reply.lines, ["Unknown module: radar (modules: status)"]);
+        }
+    }
+
+    #[test]
+    fn incorrect_commands_change_nothing() {
         let reply = go("dance", "d");
         assert_eq!(reply.action, None);
-        assert_eq!(reply.lines.len(), 4);
-        assert_eq!(go("off", "d").action, None, "without a module: help");
+        assert_eq!(reply.lines[0], "Unknown command: /essentials dance");
+        assert_eq!(reply.lines.len(), 4, "followed by the help");
+
+        let reply = go("enable", "d");
+        assert_eq!(reply.action, None);
+        assert_eq!(
+            reply.lines,
+            ["Missing module name: /essentials enable <module> (modules: status)"]
+        );
+
+        for args in [
+            "enable status now",
+            "list all",
+            "reload x",
+            "reset status x",
+        ] {
+            let reply = go(args, "d");
+            assert_eq!(reply.action, None, "{args}");
+            assert_eq!(
+                reply.lines,
+                [format!(
+                    "Too many arguments: /essentials {args} (see /essentials help)"
+                )]
+            );
+        }
     }
 
     #[test]

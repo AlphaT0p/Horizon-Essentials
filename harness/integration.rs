@@ -90,6 +90,12 @@ fn status_on(dir: &Path) -> bool {
     .unwrap()
 }
 
+/// The `/essentials list` line of the status module.
+fn list_line(state: &str) -> String {
+    let d = ModuleId::Status.descriptor();
+    format!("status: {state} - {}: {}", d.name, d.description)
+}
+
 /// Lets the save delay pass and waits for the I/O thread.
 fn settle() {
     for _ in 0..1100 {
@@ -103,15 +109,15 @@ fn the_page_and_the_command_show_the_same_state() {
     let d = Dir::new("same-state");
     start(&d.0);
     assert_eq!(page_labels(&d.0)[0], "Essentials Status: ON");
-    assert_eq!(run(&d.0, "list"), ["status: ON (Essentials Status)"]);
+    assert_eq!(run(&d.0, "list"), [list_line("ON")]);
 
     // A command changes the state: the page shows it.
-    assert_eq!(run(&d.0, "off status"), ["Essentials Status: disabled"]);
+    assert_eq!(run(&d.0, "disable status"), ["Essentials Status: disabled"]);
     assert_eq!(page_labels(&d.0)[0], "Essentials Status: OFF");
 
     // A click on the page changes the state: the command shows it.
     page_click(&d.0, 0);
-    assert_eq!(run(&d.0, "list"), ["status: ON (Essentials Status)"]);
+    assert_eq!(run(&d.0, "list"), [list_line("ON")]);
     assert!(status_on(&d.0));
 }
 
@@ -222,4 +228,86 @@ fn an_unknown_module_changes_nothing() {
         ["Unknown module: radar (modules: status)"]
     );
     assert_eq!(state::with_existing(|s| s.config.clone()).unwrap(), before);
+}
+
+#[test]
+fn enable_and_disable_apply_at_once_and_reach_the_page() {
+    let d = Dir::new("enable-disable");
+    start(&d.0);
+    assert_eq!(run(&d.0, "disable status"), ["Essentials Status: disabled"]);
+    assert!(!status_on(&d.0), "applied immediately, before any save");
+    assert_eq!(page_labels(&d.0)[0], "Essentials Status: OFF");
+    assert_eq!(
+        run(&d.0, "disable status"),
+        ["Essentials Status: already disabled"]
+    );
+    assert_eq!(run(&d.0, "enable status"), ["Essentials Status: enabled"]);
+    assert!(status_on(&d.0));
+    assert_eq!(run(&d.0, "list"), [list_line("ON")]);
+}
+
+/// A new game session: a fresh thread has a fresh Core, which loads the
+/// configuration from disk like the game does at startup.
+fn status_after_restart(dir: &Path) -> bool {
+    let dir = dir.to_path_buf();
+    std::thread::spawn(move || {
+        start(&dir);
+        status_on(&dir)
+    })
+    .join()
+    .unwrap()
+}
+
+#[test]
+fn the_state_survives_a_restart() {
+    let d = Dir::new("restart");
+    start(&d.0);
+    run(&d.0, "disable status");
+    settle();
+    assert!(!status_after_restart(&d.0), "disabled after a restart");
+    run(&d.0, "enable status");
+    // Shutdown right away: the last change is written on exit.
+    state::with_existing(|s| s.shutdown());
+    assert!(status_after_restart(&d.0), "enabled after a restart");
+}
+
+#[test]
+fn a_module_disabled_by_command_is_no_longer_run() {
+    use crate::game::essentials_registry::calls;
+    let d = Dir::new("not-run");
+    start(&d.0);
+    run(&d.0, "disable status");
+    let before = calls(ModuleId::Status);
+    let mut painted = 0;
+    for _ in 0..500 {
+        ev::frame(|| d.0.clone(), 1.0);
+        let _ = ev::tick(|| d.0.clone(), true);
+        ev::key(|| d.0.clone(), "key.mouse.left", true);
+        ev::hud(
+            [480.0, 270.0],
+            &|s: &str| s.len() as f32 * 6.0,
+            &mut |_, _, _| Some([300.0, 2.0]),
+            &mut |_, _| painted += 1,
+        );
+    }
+    assert_eq!(calls(ModuleId::Status), before, "the module was called");
+    assert_eq!(painted, 0, "nothing was drawn");
+    run(&d.0, "enable status");
+    ev::frame(|| d.0.clone(), 1.0);
+    assert!(calls(ModuleId::Status) > before, "enabled again, it runs");
+}
+
+#[test]
+fn every_registry_module_is_listed_by_the_page_and_the_command() {
+    let d = Dir::new("all-modules");
+    start(&d.0);
+    let labels = page_labels(&d.0);
+    let lines = run(&d.0, "list");
+    assert_eq!(ModuleId::all().count(), MODULES.len());
+    for (i, id) in ModuleId::all().enumerate() {
+        let desc = id.descriptor();
+        assert!(labels[i].starts_with(desc.name), "page: {}", labels[i]);
+        assert!(lines[i].starts_with(desc.key), "list: {}", lines[i]);
+        assert!(lines[i].contains(desc.description));
+    }
 }

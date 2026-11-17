@@ -24,10 +24,13 @@ Stash kept (do not delete without agreement): `stash@{0}` "commit 5 en attente :
 | `d82c898` (4/n) | `/essentials reset` → warning, then `/essentials reset confirm` within 15 s; `reset <module>`; "Confirm (15 s)" on the page |
 | `dc8567c` (5/n) | `harness/integration.rs`: page ↔ command ↔ Core tests with the real I/O thread |
 | translation | Code comments, in-game text, tests and docs translated to English (no behavior change) |
+| `9039667` | `cargo fmt` (formatting only) |
+| module management | `/essentials` = help; `enable` / `disable <module>` (`on` / `off` kept); `list` with descriptions; clear errors (missing module, too many arguments); `native_commands` helper so the chat knows `/essentials`; tests for registry, restart persistence, disabled module not run, incorrect commands |
 
 ## Passed tests (automatic only)
 
-- `cargo test`: **68/68**.
+- `cargo fmt --check`: ok.
+- `cargo test`: **75/75**, three identical runs.
 - `cargo clippy --all-targets -- -D warnings`: ok.
 - `native.py check` on Horizon 9f42064: `"check": "ok"`.
 - Benchmark (`cargo run --release --manifest-path bench/Cargo.toml`): frame + HUD 57 ns and 0 allocations,
@@ -36,8 +39,8 @@ Stash kept (do not delete without agreement): `stash@{0}` "commit 5 en attente :
 ## Installed build
 
 - **Essentials Dev** instance → `native-9f42064-ad4e79711d7f` (commit `dc8567c`, mod `horizon_essentials 0.1.0`),
-  built on 11/17 in 15 min 2 s, performance profile. **This build still has the French in-game text**:
-  the English text needs a new build before the in-game tests.
+  built on 11/17 in 15 min 2 s, performance profile. **This build predates the translation and the
+  module-management changes**: a new build is needed before the in-game tests.
 - Main **Horizon** instance: unchanged, `native-9f42064-b8ab2b688772`.
 
 Before playing: **fully close the launcher and reopen it** (a window opened before the build starts
@@ -51,9 +54,9 @@ In Essentials Dev, in a world:
 1. Options > Mods > Horizon Essentials > Settings: the page shows ("Essentials Status: ON",
    "Reload configuration", "Reset everything").
 2. Click the status button: OFF, the box at the top right disappears; click again: it comes back.
-3. `/essentials list`, `/essentials` (status), `/essentials help`.
-4. `/essentials off status`, `on status`, `toggle status`: the box follows, and so does the page.
-5. `/essentials off radar`: "Unknown module"; `/essentials dance`: help.
+3. `/essentials` and `/essentials help`: help; `/essentials status`; `/essentials list`: each module with its state and description. Typing `/essentials` is not shown in red and Tab completes it.
+4. `/essentials disable status`, `enable status`, `toggle status`: the box follows at once, and so does the page.
+5. `/essentials disable radar`: "Unknown module"; `/essentials enable`: "Missing module name"; `/essentials enable status now`: "Too many arguments"; `/essentials dance`: "Unknown command" and the help.
 6. `/essentials reset`: warning; `/essentials reset confirm` within 15 s: everything back to defaults;
    after 15 s: refused. Same with the page's two clicks.
 7. `/essentials reload` after editing `profiles/default.json` by hand.
