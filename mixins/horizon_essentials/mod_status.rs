@@ -1,24 +1,24 @@
-// Horizon Essentials : le module témoin (crate::game::essentials_status).
-// Une petite boîte « Essentials 0.1.0 - default - 1/1 » : elle prouve que le Core
-// charge la configuration, applique l'activation, le placement et le style, et
-// que le rendu ne reconstruit rien tant que rien ne change.
+// Horizon Essentials: the status module (crate::game::essentials_status).
+// A small "Essentials 0.1.0 - default - 1/1" box: it proves that the Core loads
+// the configuration, applies enabling, placement and style, and that rendering
+// rebuilds nothing as long as nothing changes.
 
 use std::fmt::Write as _;
 
 use crate::game::essentials_config::ResolvedStyle;
 use crate::game::essentials_types::{Module, Shapes, VERSION, WidgetCtx};
 
-/// La hauteur d'une ligne de boîte, comme celles de Horizon.
+/// The height of a box line, like Horizon's boxes.
 pub const LINE_HEIGHT: f32 = 12.0;
 
 #[derive(Debug, Default)]
 pub struct Status {
     shapes: Shapes,
     line: String,
-    // Ce qui a servi à construire `shapes` : on reconstruit seulement s'il change.
+    // What `shapes` was built from: rebuilt only when it changes.
     built: Option<(usize, usize, ResolvedStyle)>,
     built_profile: String,
-    /// Combien de fois les formes ont été reconstruites (pour les tests).
+    /// How many times the shapes were rebuilt (for tests).
     pub rebuilds: u64,
 }
 
@@ -63,7 +63,7 @@ mod tests {
     }
 
     #[test]
-    fn la_boite_ne_se_reconstruit_que_si_elle_change() {
+    fn the_box_is_rebuilt_only_when_it_changes() {
         let measure = |s: &str| s.len() as f32 * 6.0;
         let style = Style::default().resolve();
         let mut m = Status::default();
@@ -74,7 +74,7 @@ mod tests {
         for _ in 0..100 {
             m.widget(&ctx(&measure, "default", style));
         }
-        assert_eq!(m.rebuilds, 1, "100 frames identiques : aucune reconstruction");
+        assert_eq!(m.rebuilds, 1, "100 identical frames: no rebuild");
         m.widget(&ctx(&measure, "pvp", style));
         assert_eq!(m.rebuilds, 2);
         m.on_enabled(true);
@@ -83,7 +83,7 @@ mod tests {
     }
 
     #[test]
-    fn sans_fond_pas_de_rectangle() {
+    fn no_background_no_rectangle() {
         let measure = |_: &str| 10.0;
         let style = Style { background: 0, ..Style::default() }.resolve();
         let mut m = Status::default();

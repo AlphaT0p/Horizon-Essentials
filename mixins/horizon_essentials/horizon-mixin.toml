@@ -1,15 +1,15 @@
-# Horizon Essentials : un seul bundle, plusieurs modules (un fichier par responsabilité).
-# Préfixes : core_ (Core), ui_ (interface), mod_ (modules), profiles_ (profils), h_ (helpers).
+# Horizon Essentials: a single bundle, several modules (one file per responsibility).
+# Prefixes: core_ (Core), ui_ (user interface), mod_ (modules), profiles_ (profiles), h_ (helpers).
 [mod]
 id = "horizon_essentials"
 version = "0.1.0"
 priority = 100
 
-# Le commit testé : Nightly 2026-11-13. Seuls les hook points sont utilisés.
+# The tested commit: Nightly 2026-11-13. Only hook points are used.
 [compatibility]
 horizon_revision = "9f42064c11efe7ef3e5ed2baad7ddc2a3b36eea0"
 
-# ── Modules (Rust pur, testés par cargo test) ──────────────────────────────
+# ── Modules (plain Rust, tested by cargo test) ─────────────────────────────
 [[module]]
 id = "types"
 file = "crates/horizon-client/src/game.rs"
@@ -80,7 +80,7 @@ name = "essentials_command"
 visibility = "pub"
 source = "ui_command.rs"
 
-# ── Helpers (un par hook) ───────────────────────────────────────────────────
+# ── Helpers (one per hook) ─────────────────────────────────────────────────
 [[injection]]
 id = "frame"
 kind = "HEAD"

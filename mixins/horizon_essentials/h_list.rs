@@ -1,4 +1,4 @@
-// La ligne de Horizon Essentials dans Options > Mods.
+// The Horizon Essentials entry in Options > Mods.
 fn essentials_listed(mods: &mut Vec<crate::game::native_hooks::NativeMod>) {
     use crate::game::essentials_types as t;
     mods.push(crate::game::native_hooks::NativeMod {

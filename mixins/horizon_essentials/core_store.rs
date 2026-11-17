@@ -1,15 +1,15 @@
-// Horizon Essentials : le stockage sur disque (crate::game::essentials_store).
+// Horizon Essentials: disk storage (crate::game::essentials_store).
 //
-// Persistance : le dossier vient de `native_data_dir`, dans le dossier de l'instance
-// (horizon-mods/.horizon-mod-data/horizon_essentials/), jamais dans celui d'une
-// version : les réglages survivent aux recompilations et aux mises à jour.
+// Persistence: the folder comes from `native_data_dir`, inside the instance folder
+// (horizon-mods/.horizon-mod-data/horizon_essentials/), never inside a version
+// folder: settings survive rebuilds and updates.
 //
-//   active                  le nom du profil actif
-//   profiles/<nom>.json     un profil (format de essentials_config)
+//   active                  the name of the active profile
+//   profiles/<name>.json    a profile (essentials_config format)
 //
-// Écriture atomique : fichier temporaire puis renommage, pour qu'un arrêt brutal
-// ne laisse jamais un fichier à moitié écrit. Un fichier corrompu est copié en
-// `<nom>.json.bak` avant d'être remplacé : rien n'est perdu.
+// Atomic write: temporary file, then rename, so that a crash never leaves a
+// half-written file. A corrupted file is copied to `<name>.json.bak` before
+// being replaced: nothing is lost.
 
 use std::fs;
 use std::io;
@@ -22,11 +22,11 @@ use std::time::{Duration, Instant};
 use crate::game::essentials_config::Config;
 
 pub const DEFAULT_PROFILE: &str = "default";
-/// La sauvegarde attend une seconde sans changement (un glisser dans le HUD Editor
-/// donne des dizaines de changements : un seul fichier écrit).
+/// Saving waits for one second without changes (a drag in the HUD Editor makes
+/// dozens of changes: only one file is written).
 pub const SAVE_DELAY_MS: f32 = 1000.0;
 
-/// Ce que `load` a trouvé.
+/// What `load` found.
 #[derive(Debug)]
 pub struct Loaded {
     pub profile: String,
@@ -34,7 +34,7 @@ pub struct Loaded {
     pub warnings: Vec<String>,
 }
 
-/// Un nom de profil sûr pour un nom de fichier : 1 à 32 caractères `a-z`, `0-9`, `_`, `-`.
+/// A profile name that is safe as a file name: 1 to 32 characters `a-z`, `0-9`, `_`, `-`.
 pub fn valid_profile_name(name: &str) -> bool {
     (1..=32).contains(&name.len())
         && name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_' || c == '-')
@@ -44,7 +44,7 @@ pub fn profile_path(dir: &Path, profile: &str) -> PathBuf {
     dir.join("profiles").join(format!("{profile}.json"))
 }
 
-/// Lit le profil actif. Ne panique jamais et renvoie toujours une configuration valide.
+/// Reads the active profile. Never panics and always returns a valid configuration.
 pub fn load(dir: &Path) -> Loaded {
     count_disk_op();
     let mut warnings = Vec::new();
@@ -54,7 +54,7 @@ pub fn load(dir: &Path) -> Loaded {
             if valid_profile_name(name) {
                 name.to_owned()
             } else {
-                warnings.push(format!("profil actif invalide ({name:?}) : profil « {DEFAULT_PROFILE} »"));
+                warnings.push(format!("invalid active profile ({name:?}): using profile \"{DEFAULT_PROFILE}\""));
                 DEFAULT_PROFILE.to_owned()
             }
         }
@@ -67,28 +67,28 @@ pub fn load(dir: &Path) -> Loaded {
             if !found.is_empty() {
                 let backup = path.with_extension("json.bak");
                 if fs::copy(&path, &backup).is_ok() {
-                    warnings.push(format!("ancien fichier copié dans profiles/{profile}.json.bak"));
+                    warnings.push(format!("old file copied to profiles/{profile}.json.bak"));
                 }
                 warnings.splice(0..0, found);
             }
             config
         }
-        // Premier lancement : pas de fichier, pas d'avertissement.
+        // First launch: no file, no warning.
         Err(e) if e.kind() == io::ErrorKind::NotFound => Config::default(),
         Err(e) => {
-            warnings.push(format!("profil « {profile} » illisible ({e}) : valeurs par défaut"));
+            warnings.push(format!("unreadable profile \"{profile}\" ({e}): default values"));
             Config::default()
         }
     };
     Loaded { profile, config, warnings }
 }
 
-/// Écrit le profil, et `active` s'il a changé.
+/// Writes the profile, and `active` if it changed.
 pub fn save(dir: &Path, profile: &str, config: &Config) -> io::Result<()> {
     save_json(dir, profile, &config.to_json())
 }
 
-/// Comme `save`, avec le JSON déjà préparé (par le thread du jeu).
+/// Like `save`, with the JSON already prepared (by the game thread).
 pub fn save_json(dir: &Path, profile: &str, json: &str) -> io::Result<()> {
     count_disk_op();
     write_atomic(&profile_path(dir, profile), json.as_bytes())?;
@@ -107,14 +107,14 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
     tmp.push(".tmp");
     let tmp = PathBuf::from(tmp);
     fs::write(&tmp, bytes)?;
-    // Sous Windows comme ailleurs, `rename` remplace la cible existante.
+    // On Windows as elsewhere, `rename` replaces the existing target.
     fs::rename(&tmp, path).inspect_err(|_| {
         let _ = fs::remove_file(&tmp);
     })
 }
 
-/// Le délai avant sauvegarde, compté en temps de frame : les frames continuent
-/// quand le menu Échap met le jeu en pause, contrairement aux ticks.
+/// The delay before saving, counted in frame time: frames keep running when
+/// the escape menu pauses the game, unlike ticks.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct SaveTimer {
     pending: bool,
@@ -122,13 +122,13 @@ pub struct SaveTimer {
 }
 
 impl SaveTimer {
-    /// Un changement vient d'avoir lieu.
+    /// A change has just happened.
     pub fn mark(&mut self) {
         self.pending = true;
         self.quiet_ms = 0.0;
     }
 
-    /// Le temps passe. Vrai quand il faut sauvegarder maintenant.
+    /// Time passes. True when it is time to save.
     pub fn advance(&mut self, elapsed_ms: f32) -> bool {
         if !self.pending {
             return false;
@@ -146,20 +146,19 @@ impl SaveTimer {
     }
 }
 
-// ── Thread d'entrées-sorties ────────────────────────────────────────────────
+// ── I/O thread ──────────────────────────────────────────────────────────────
 //
-// Le disque n'est jamais touché par le thread du jeu (rendu) : il envoie des
-// demandes au thread « Essentials I/O » par un canal et relit les réponses sans
-// attendre. Rien n'est partagé : chaque demande porte ses données par valeur.
+// The disk is never touched by the game (render) thread: it sends requests to
+// the "Essentials I/O" thread through a channel and picks up the replies without
+// waiting. Nothing is shared: every request carries its data by value.
 //
-// - Une demande arrivée pendant une écriture attend dans le canal : elle n'est
-//   jamais perdue.
-// - Plusieurs sauvegardes en attente du même profil, sans chargement entre elles,
-//   n'écrivent que la dernière (elle contient toutes les modifications).
-// - Une panique pendant une opération est rattrapée et devient une erreur.
-// - À la fermeture, `finish` termine les écritures en attente (avec un délai maximal).
+// - A request that arrives during a write waits in the channel: it is never lost.
+// - Several pending saves of the same profile, with no load between them, only
+//   write the last one (it contains every change).
+// - A panic during an operation is caught and becomes an error.
+// - On shutdown, `finish` completes the pending writes (with a maximum delay).
 
-/// Une demande au thread d'E/S.
+/// A request to the I/O thread.
 #[derive(Debug)]
 pub enum Request {
     Load { dir: PathBuf },
@@ -167,7 +166,7 @@ pub enum Request {
     Stop,
 }
 
-/// Une réponse du thread d'E/S.
+/// A reply from the I/O thread.
 #[derive(Debug)]
 pub enum Reply {
     Loaded(Loaded),
@@ -175,7 +174,7 @@ pub enum Reply {
     Stopped,
 }
 
-/// Le côté « jeu » du thread d'E/S.
+/// The "game" side of the I/O thread.
 #[derive(Debug)]
 pub struct Io {
     tx: Sender<Request>,
@@ -184,8 +183,8 @@ pub struct Io {
 }
 
 impl Io {
-    /// Démarre le thread. None s'il ne peut pas démarrer : l'appelant travaille alors
-    /// sans thread (comme avant), au lieu de perdre les réglages.
+    /// Starts the thread. None if it cannot start: the caller then works without
+    /// a thread (as before), instead of losing the settings.
     pub fn spawn() -> Option<Io> {
         let (tx, requests) = mpsc::channel();
         let (replies, rx) = mpsc::channel();
@@ -196,26 +195,26 @@ impl Io {
         Some(Io { tx, rx, handle: Some(handle) })
     }
 
-    /// Envoie une demande. Si le thread n'est plus là, la demande est rendue
-    /// (l'appelant peut alors la traiter lui-même).
+    /// Sends a request. If the thread is gone, the request is handed back
+    /// (the caller can then handle it itself).
     pub fn send(&self, request: Request) -> Result<(), Request> {
         self.tx.send(request).map_err(|e| e.0)
     }
 
-    /// La prochaine réponse arrivée, sans attendre (n'alloue rien si le canal est vide).
+    /// The next reply that arrived, without waiting (allocates nothing if the channel is empty).
     pub fn try_recv(&self) -> Option<Reply> {
         self.rx.try_recv().ok()
     }
 
-    /// Attend une réponse au plus `timeout`.
+    /// Waits for a reply for at most `timeout`.
     pub fn recv_timeout(&self, timeout: Duration) -> Option<Reply> {
         self.rx.recv_timeout(timeout).ok()
     }
 
-    /// Fermeture : demande l'arrêt et rend les réponses arrivées d'ici là (au plus
-    /// `timeout`). Le thread est attendu s'il s'est arrêté à temps ; sinon il est
-    /// laissé finir seul (le processus se termine, l'écriture atomique garantit
-    /// qu'aucun fichier n'est laissé à moitié écrit).
+    /// Shutdown: asks the thread to stop and returns the replies received until
+    /// then (at most `timeout`). The thread is joined if it stopped in time;
+    /// otherwise it is left to finish on its own (the process exits, and atomic
+    /// writes guarantee that no file is left half-written).
     pub fn finish(mut self, timeout: Duration) -> Vec<Reply> {
         let mut replies = Vec::new();
         if self.send(Request::Stop).is_err() {
@@ -253,7 +252,7 @@ fn worker(requests: Receiver<Request>, replies: Sender<Reply>) {
                     let loaded = catch_unwind(AssertUnwindSafe(|| load(dir))).unwrap_or_else(|_| Loaded {
                         profile: DEFAULT_PROFILE.to_owned(),
                         config: Config::default(),
-                        warnings: vec!["erreur interne pendant la lecture : valeurs par défaut".to_owned()],
+                        warnings: vec!["internal error while reading: default values".to_owned()],
                     });
                     Reply::Loaded(loaded)
                 }
@@ -264,7 +263,7 @@ fn worker(requests: Receiver<Request>, replies: Sender<Reply>) {
                         let error = match catch_unwind(AssertUnwindSafe(|| save_json(dir, profile, json))) {
                             Ok(Ok(())) => None,
                             Ok(Err(e)) => Some(e.to_string()),
-                            Err(_) => Some("erreur interne pendant l'écriture".to_owned()),
+                            Err(_) => Some("internal error while writing".to_owned()),
                         };
                         Reply::Saved { seq: *seq, error }
                     }
@@ -277,7 +276,7 @@ fn worker(requests: Receiver<Request>, replies: Sender<Reply>) {
     }
 }
 
-/// Une sauvegarde plus récente du même profil suit, sans chargement entre les deux.
+/// A newer save of the same profile follows, with no load in between.
 fn superseded(later: &[Request], dir: &Path, profile: &str) -> bool {
     for r in later {
         match r {
@@ -289,7 +288,7 @@ fn superseded(later: &[Request], dir: &Path, profile: &str) -> bool {
     false
 }
 
-// Compte les opérations disque du thread courant, pour les tests (rien en jeu).
+// Counts the current thread's disk operations, for tests (nothing in game).
 #[cfg(test)]
 thread_local! {
     pub(crate) static DISK_OPS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
@@ -309,7 +308,7 @@ pub(crate) mod tests {
     use crate::game::essentials_registry::ModuleId;
     use crate::game::essentials_types::Action;
 
-    /// Un dossier temporaire propre à un test, supprimé à la fin.
+    /// A temporary folder of its own for a test, deleted at the end.
     pub(crate) struct TempDir(pub PathBuf);
     impl TempDir {
         pub(crate) fn new(name: &str) -> TempDir {
@@ -326,8 +325,8 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn premier_lancement_sans_fichier() {
-        let d = TempDir::new("vide");
+    fn first_launch_without_a_file() {
+        let d = TempDir::new("empty");
         let l = load(&d.0);
         assert_eq!(l.profile, DEFAULT_PROFILE);
         assert_eq!(l.config, Config::default());
@@ -335,96 +334,96 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn sauvegarde_puis_relecture() {
-        let d = TempDir::new("aller-retour");
+    fn save_then_read_back() {
+        let d = TempDir::new("round-trip");
         let mut c = Config::default();
         c.apply(Action::Toggle(ModuleId::Status));
         save(&d.0, "pvp", &c).unwrap();
         assert_eq!(fs::read_to_string(d.0.join("active")).unwrap(), "pvp");
-        assert!(!profile_path(&d.0, "pvp").with_extension("json.tmp").exists(), "pas de fichier temporaire oublié");
+        assert!(!profile_path(&d.0, "pvp").with_extension("json.tmp").exists(), "no leftover temporary file");
         let l = load(&d.0);
         assert_eq!((l.profile.as_str(), &l.config), ("pvp", &c));
         assert!(l.warnings.is_empty());
     }
 
     #[test]
-    fn un_fichier_corrompu_est_garde_en_bak() {
-        let d = TempDir::new("corrompu");
+    fn a_corrupted_file_is_kept_as_bak() {
+        let d = TempDir::new("corrupted");
         let path = profile_path(&d.0, DEFAULT_PROFILE);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(&path, "{ ceci n'est pas du JSON").unwrap();
+        fs::write(&path, "{ this is not JSON").unwrap();
         let l = load(&d.0);
         assert_eq!(l.config, Config::default());
         assert_eq!(l.warnings.len(), 2, "{:?}", l.warnings);
-        assert_eq!(fs::read_to_string(path.with_extension("json.bak")).unwrap(), "{ ceci n'est pas du JSON");
-        assert!(path.exists(), "l'original n'est jamais supprimé à la lecture");
+        assert_eq!(fs::read_to_string(path.with_extension("json.bak")).unwrap(), "{ this is not JSON");
+        assert!(path.exists(), "the original is never deleted when reading");
     }
 
     #[test]
-    fn un_profil_actif_dangereux_est_refuse() {
-        let d = TempDir::new("actif");
-        fs::write(d.0.join("active"), "../../ailleurs").unwrap();
+    fn a_dangerous_active_profile_is_rejected() {
+        let d = TempDir::new("active");
+        fs::write(d.0.join("active"), "../../elsewhere").unwrap();
         let l = load(&d.0);
         assert_eq!(l.profile, DEFAULT_PROFILE);
         assert_eq!(l.warnings.len(), 1);
         assert!(valid_profile_name("pvp_2"));
         assert!(!valid_profile_name(""));
-        assert!(!valid_profile_name("Majuscule"));
+        assert!(!valid_profile_name("Uppercase"));
     }
 
     #[test]
-    fn le_thread_d_es_ecrit_la_derniere_version_sans_rien_perdre() {
-        let d = TempDir::new("io-rafale");
-        let io = Io::spawn().expect("thread d'E/S");
+    fn the_io_thread_writes_the_latest_version_without_losing_anything() {
+        let d = TempDir::new("io-burst");
+        let io = Io::spawn().expect("I/O thread");
         let mut c = Config::default();
         for seq in 1..=100 {
             c.apply(Action::Toggle(ModuleId::Status));
             let save = Request::Save { dir: d.0.clone(), profile: "default".into(), json: c.to_json(), seq };
             assert!(io.send(save).is_ok());
         }
-        // Une lecture après les écritures voit la dernière (ordre conservé).
+        // A read after the writes sees the last one (order is kept).
         assert!(io.send(Request::Load { dir: d.0.clone() }).is_ok());
         let replies = io.finish(Duration::from_secs(5));
         let saved = replies.iter().filter(|r| matches!(r, Reply::Saved { .. })).count();
-        assert_eq!(saved, 100, "chaque demande reçoit sa réponse");
+        assert_eq!(saved, 100, "every request gets its reply");
         assert!(replies.iter().all(|r| !matches!(r, Reply::Saved { error: Some(_), .. })));
         let Some(Reply::Loaded(l)) = replies.iter().find(|r| matches!(r, Reply::Loaded(_))) else {
-            panic!("pas de lecture");
+            panic!("no read");
         };
         assert_eq!(l.config, c);
     }
 
     #[test]
-    fn une_sauvegarde_n_est_sautee_que_si_une_plus_recente_suit_sans_lecture() {
+    fn a_save_is_skipped_only_if_a_newer_one_follows_without_a_read() {
         let save = |p: &str| Request::Save { dir: PathBuf::from("d"), profile: p.into(), json: String::new(), seq: 0 };
         let load = Request::Load { dir: PathBuf::from("d") };
         let d = Path::new("d");
         assert!(superseded(&[save("default")], d, "default"));
-        assert!(!superseded(&[save("pvp")], d, "default"), "un autre profil ne remplace rien");
-        assert!(!superseded(&[load, save("default")], d, "default"), "une lecture entre les deux");
+        assert!(!superseded(&[save("pvp")], d, "default"), "another profile replaces nothing");
+        assert!(!superseded(&[load, save("default")], d, "default"), "a read in between");
         assert!(!superseded(&[], d, "default"));
     }
 
     #[test]
-    fn la_fermeture_attend_les_ecritures() {
-        let d = TempDir::new("io-fermeture");
-        let io = Io::spawn().expect("thread d'E/S");
+    fn shutdown_waits_for_the_writes() {
+        let d = TempDir::new("io-shutdown");
+        let io = Io::spawn().expect("I/O thread");
         let mut c = Config::default();
         c.apply(Action::Toggle(ModuleId::Status));
         let save = Request::Save { dir: d.0.clone(), profile: "default".into(), json: c.to_json(), seq: 1 };
         assert!(io.send(save).is_ok());
         io.finish(Duration::from_secs(5));
-        assert_eq!(load(&d.0).config, c, "écrit avant la fin de `finish`");
+        assert_eq!(load(&d.0).config, c, "written before `finish` returns");
     }
 
     #[test]
-    fn le_delai_de_sauvegarde() {
+    fn the_save_delay() {
         let mut t = SaveTimer::default();
-        assert!(!t.advance(5000.0), "rien à sauvegarder");
+        assert!(!t.advance(5000.0), "nothing to save");
         t.mark();
         assert!(!t.advance(600.0));
         t.mark();
-        assert!(!t.advance(600.0), "un nouveau changement relance le délai");
+        assert!(!t.advance(600.0), "a new change restarts the delay");
         assert!(t.advance(500.0));
         t.done();
         assert!(!t.pending());

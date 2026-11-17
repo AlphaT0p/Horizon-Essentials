@@ -1,83 +1,84 @@
-# Reprise du développement
+# Resuming development
 
-État au 17/11/2026, 13 h 15. Développement mis en pause au milieu du **commit 5** (gestion des modules) :
-code terminé et testé automatiquement, build installé, **aucun test en jeu fait**.
+State on 11/17/2026. Development paused in the middle of **commit 5** (module management):
+code finished and tested automatically, **no in-game test done yet**.
 
 ## Branches
 
-| Branche | Dernier commit | Rôle |
-|---|---|---|
-| `main` | `31e500b` = `origin/main` (GitHub) | Core 1 à 4, optimisation E/S, docs et bench — tout ce qui est poussé |
-| `perf/io-thread` | `31e500b` | Conservée (déjà intégrée à `main` par avance rapide) |
-| **`feat/gestion-modules`** | **`26595cf`** (ce rapport) ; dernier code : `dc8567c` | **Commit 5, local, non poussé** — c'est ici qu'il faut reprendre |
-
-Stash conservé (ne pas supprimer sans accord) : `stash@{0}` « commit 5 en attente : page de réglages et
-/essentials » — les 5 fichiers d'origine, aussi présents (identiques) dans le commit `18449b3`.
-
-## Commits du commit 5 (`main..feat/gestion-modules`)
-
-| Commit | Contenu |
+| Branch | Role |
 |---|---|
-| `18449b3` (1/n) | Restauration des 5 fichiers mis de côté (`git stash apply`, identiques octet pour octet) |
-| `45207c7` (2/n) | `essentials_events::view` : instantané en lecture seule du Core, None pendant le chargement |
-| `e5fa772` (3/n) | Page Options > Mods et `/essentials` branchées au Core ; « Chargement de la configuration… » ; modules `ui_settings` / `ui_command` et hooks `native_settings`, `native_settings_click`, `native_command` déclarés |
-| `d82c898` (4/n) | `/essentials reset` → avertissement puis `/essentials reset confirm` sous 15 s ; `reset <module>` ; « Confirmer (15 s) » sur la page |
-| `dc8567c` (5/n) | `harness/integration.rs` : tests page ↔ commande ↔ Core avec le vrai thread d'E/S |
+| `main` (= `origin/main` on GitHub) | Core 1 to 4, I/O optimization, docs and bench, all in English — everything that is pushed |
+| `perf/io-thread` | Kept (already in `main` through a fast-forward) |
+| **`feat/gestion-modules`** | **Commit 5, local, not pushed** — resume here |
 
-## Tests réussis (automatiques uniquement)
+Stash kept (do not delete without agreement): `stash@{0}` "commit 5 en attente : page de réglages et
+/essentials" — the 5 original files, also present (identical) in commit `18449b3`.
 
-- `cargo test` : **68/68**, trois passes identiques.
-- `cargo clippy --all-targets -- -D warnings` : ok.
-- `native.py check` sur Horizon 9f42064 : `"check": "ok"`.
-- Banc de mesure (`cargo run --release --manifest-path bench/Cargo.toml`) : frame + HUD 57 ns et 0 allocation,
-  pire frame pendant une sauvegarde 21 µs — inchangé par rapport à l'optimisation.
-- Build launcher : ok (ci-dessous).
+## Commit 5 commits (`main..feat/gestion-modules`)
 
-## Build installé
+| Commit | Content |
+|---|---|
+| `18449b3` (1/n) | Restore the 5 files set aside (`git stash apply`, byte-for-byte identical) |
+| `45207c7` (2/n) | `essentials_events::view`: read-only snapshot of the Core, None while loading |
+| `e5fa772` (3/n) | Options > Mods page and `/essentials` wired to the Core; "Loading the configuration…"; `ui_settings` / `ui_command` modules and `native_settings`, `native_settings_click`, `native_command` hooks declared |
+| `d82c898` (4/n) | `/essentials reset` → warning, then `/essentials reset confirm` within 15 s; `reset <module>`; "Confirm (15 s)" on the page |
+| `dc8567c` (5/n) | `harness/integration.rs`: page ↔ command ↔ Core tests with the real I/O thread |
+| translation | Code comments, in-game text, tests and docs translated to English (no behavior change) |
 
-- Instance **Essentials Dev** → `native-9f42064-ad4e79711d7f` (commit `dc8567c`, mod `horizon_essentials 0.1.0`),
-  construit le 17/11 à 13 h 09 en 15 min 2 s, profil performance.
-- Instance **Horizon** (principale) : inchangée, `native-9f42064-b8ab2b688772` (ton build avec le Zoom officiel).
+## Passed tests (automatic only)
 
-Avant de jouer : **fermer complètement le launcher et le rouvrir** (une fenêtre ouverte avant le build lance
-l'ancien binaire). Le **premier lancement** de ce build prendra environ 1 minute (cache de données de Horizon
-reconstruit), les suivants environ 7 s.
+- `cargo test`: **68/68**.
+- `cargo clippy --all-targets -- -D warnings`: ok.
+- `native.py check` on Horizon 9f42064: `"check": "ok"`.
+- Benchmark (`cargo run --release --manifest-path bench/Cargo.toml`): frame + HUD 57 ns and 0 allocations,
+  worst frame during a save 21 µs — unchanged since the optimization.
 
-## Tests en jeu restant à faire (commit 5)
+## Installed build
 
-Dans Essentials Dev, dans un monde :
+- **Essentials Dev** instance → `native-9f42064-ad4e79711d7f` (commit `dc8567c`, mod `horizon_essentials 0.1.0`),
+  built on 11/17 in 15 min 2 s, performance profile. **This build still has the French in-game text**:
+  the English text needs a new build before the in-game tests.
+- Main **Horizon** instance: unchanged, `native-9f42064-b8ab2b688772`.
 
-1. Options > Mods > Horizon Essentials > Settings : la page s'affiche (« Témoin Essentials : ACTIVÉ »,
-   « Recharger la configuration », « Tout réinitialiser »).
-2. Clic sur le témoin : DÉSACTIVÉ, la boîte en haut à droite disparaît ; nouveau clic : elle revient.
-3. `/essentials list`, `/essentials` (état), `/essentials help`.
-4. `/essentials off status`, `on status`, `toggle status` : la boîte suit, la page aussi.
-5. `/essentials off radar` : « Module inconnu » ; `/essentials danse` : aide.
-6. `/essentials reset` : avertissement ; `/essentials reset confirm` dans les 15 s : tout par défaut ;
-   après 15 s : refusé. Même chose avec les deux clics de la page.
-7. `/essentials reload` après avoir modifié `profiles/default.json` à la main.
-8. Fermer le jeu juste après un changement, relancer : le changement est conservé (sauvegarde à la fermeture).
-9. Recompiler (nouveau build), relancer : la configuration est conservée.
-10. F1 et F3 : la boîte disparaît.
-11. FPS comparables avec le mod activé et coupé (Options > Mods).
+Before playing: **fully close the launcher and reopen it** (a window opened before the build starts
+the old binary). The **first launch** of a new build takes about 1 minute (Horizon's data cache is
+rebuilt), later ones about 7 s.
 
-Fichier de configuration : `%APPDATA%\horizon\instances\essentials-dev\horizon-mods\.horizon-mod-data\horizon_essentials\`.
+## In-game tests still to do (commit 5)
 
-## Travaux non terminés
+In Essentials Dev, in a world:
 
-- **Validation en jeu du commit 5** (liste ci-dessus), puis éventuelles corrections.
-- **Push** de `feat/gestion-modules` : seulement après validation en jeu et accord explicite.
-- **Interface « Centre Essentials »** : proposition présentée (liste de modules à catégories, écran ouvert par
-  une touche en jeu, panneau compact sur le menu Échap), **en attente de validation, rien n'est codé**.
-- Ensuite (validé) : premiers modules CPS Counter, Keystrokes, Zoom, FPS Counter — en vérifiant d'abord ce que
-  les mods officiels Zoom et FPS Counter de Horizon font déjà, pour ne rien dupliquer.
-- Pas commencés, volontairement : Horizon Graphics, Horizon Visuals.
+1. Options > Mods > Horizon Essentials > Settings: the page shows ("Essentials Status: ON",
+   "Reload configuration", "Reset everything").
+2. Click the status button: OFF, the box at the top right disappears; click again: it comes back.
+3. `/essentials list`, `/essentials` (status), `/essentials help`.
+4. `/essentials off status`, `on status`, `toggle status`: the box follows, and so does the page.
+5. `/essentials off radar`: "Unknown module"; `/essentials dance`: help.
+6. `/essentials reset`: warning; `/essentials reset confirm` within 15 s: everything back to defaults;
+   after 15 s: refused. Same with the page's two clicks.
+7. `/essentials reload` after editing `profiles/default.json` by hand.
+8. Close the game right after a change, start it again: the change is kept (save on exit).
+9. Rebuild (new build), start again: the configuration is kept.
+10. F1 and F3: the box disappears.
+11. Comparable FPS with the mod enabled and disabled (Options > Mods).
 
-## Environnement à retrouver
+Configuration file: `%APPDATA%\horizon\instances\essentials-dev\horizon-mods\.horizon-mod-data\horizon_essentials\`.
 
-- Projet : `Desktop\Horizon-Essentials` ; Ubuntu (WSL) avec le lien `~/horizon-mods/native/horizon-essentials`
-  vers ce dossier ; commandes dans [environnement.md](environnement.md).
-- Vérifier un `native.py check` par la ligne `"check": "ok"` (le code de sortie affiché par certains scripts
-  peut être trompeur).
-- Un worktree temporaire (`he-commit4`, détaché sur `1e4d857`) existe dans le dossier temporaire de session :
-  il ne sert plus ; s'il disparaît avec ce dossier, `git worktree prune` nettoie la référence.
+## Unfinished work
+
+- **In-game validation of commit 5** (list above), then any fixes.
+- **Push** of `feat/gestion-modules`: only after in-game validation and explicit agreement.
+- **"Essentials Center" UI**: proposal presented (module list with categories, screen opened by a key
+  in game, compact panel on the escape menu), **awaiting validation, nothing coded**.
+- Next (validated): first modules CPS Counter, Keystrokes, Zoom, FPS Counter — first checking what
+  Horizon's official Zoom and FPS Counter mods already do, so nothing is duplicated.
+- Deliberately not started: Horizon Graphics, Horizon Visuals.
+
+## Environment
+
+- Project: `Desktop\Horizon-Essentials`; Ubuntu (WSL) with the link `~/horizon-mods/native/horizon-essentials`
+  to this folder; commands in [environnement.md](environnement.md).
+- Check a `native.py check` by its `"check": "ok"` line (the exit code shown by some scripts can be
+  misleading).
+- Temporary worktrees (`he-commit4`, `he-docs`) may exist in the session's temporary folder: they are no
+  longer used; if they disappear with that folder, `git worktree prune` cleans up the reference.

@@ -1,5 +1,5 @@
-// /essentials : l'interface lit l'instantané du Core et rend une Action, le Core
-// l'applique, les réponses vont dans le chat. Les autres commandes ne sont pas touchées.
+// /essentials: the UI reads the Core snapshot and returns an Action, the Core
+// applies it, the replies go to the chat. Other commands are left alone.
 fn essentials_command(game: &mut crate::game::Game<'_>, command: &str, ran: &mut bool) {
     use crate::game::{essentials_command as ui, essentials_events as ev, essentials_types as t};
     let Some(args) = ui::ours(command) else {

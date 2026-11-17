@@ -1,7 +1,7 @@
-//! Tests d'intégration : la page de réglages, la commande /essentials et le Core
-//! ensemble, comme les helpers `h_settings`, `h_click` et `h_command` les relient
-//! dans le jeu (ces helpers appellent le jeu et ne sont pas compilés ici : les
-//! fonctions ci-dessous refont exactement leur enchaînement).
+//! Integration tests: the settings page, the /essentials command and the Core
+//! together, as the `h_settings`, `h_click` and `h_command` helpers connect them
+//! in the game (those helpers call the game and are not compiled here: the
+//! functions below reproduce exactly the same sequence).
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -30,20 +30,20 @@ impl Drop for Dir {
     }
 }
 
-/// Démarre le Core sur `dir` et attend la fin du chargement.
+/// Starts the Core on `dir` and waits for loading to finish.
 fn start(dir: &Path) {
     ev::frame(|| dir.to_path_buf(), 16.0);
     assert_eq!(state::with_existing(|s| s.wait_idle(WAIT)), Some(true));
 }
 
-/// h_settings : les libellés de la page.
+/// h_settings: the page labels.
 fn page_labels(dir: &Path) -> Vec<String> {
     let mut out = Vec::new();
     ev::view(|| dir.to_path_buf(), |snapshot| page::labels(snapshot, &mut out));
     out
 }
 
-/// h_click : un clic sur la page.
+/// h_click: a click on the page.
 fn page_click(dir: &Path, button: usize) {
     let loaded = ev::view(|| dir.to_path_buf(), |s| s.is_some()).unwrap_or(false);
     if let Some(action) = page::click(button, loaded) {
@@ -51,7 +51,7 @@ fn page_click(dir: &Path, button: usize) {
     }
 }
 
-/// h_command : /essentials <args>, et les lignes écrites dans le chat.
+/// h_command: /essentials <args>, and the lines written in the chat.
 fn run(dir: &Path, args: &str) -> Vec<String> {
     let reply = ev::view(|| dir.to_path_buf(), |snapshot| command::run(args, snapshot)).unwrap();
     let mut lines = reply.lines;
@@ -72,7 +72,7 @@ fn status_on(dir: &Path) -> bool {
     ev::view(|| dir.to_path_buf(), |s| s.unwrap().resolved.on[ModuleId::Status.index()]).unwrap()
 }
 
-/// Laisse passer le délai de sauvegarde et attend le thread d'E/S.
+/// Lets the save delay pass and waits for the I/O thread.
 fn settle() {
     for _ in 0..1100 {
         ev::frame(PathBuf::new, 1.0);
@@ -81,36 +81,36 @@ fn settle() {
 }
 
 #[test]
-fn la_page_et_la_commande_montrent_le_meme_etat() {
-    let d = Dir::new("meme-etat");
+fn the_page_and_the_command_show_the_same_state() {
+    let d = Dir::new("same-state");
     start(&d.0);
-    assert_eq!(page_labels(&d.0)[0], "Témoin Essentials : ACTIVÉ");
-    assert_eq!(run(&d.0, "list"), ["status : ACTIVÉ (Témoin Essentials)"]);
+    assert_eq!(page_labels(&d.0)[0], "Essentials Status: ON");
+    assert_eq!(run(&d.0, "list"), ["status: ON (Essentials Status)"]);
 
-    // Une commande change l'état : la page le montre.
-    assert_eq!(run(&d.0, "off status"), ["Témoin Essentials : désactivé"]);
-    assert_eq!(page_labels(&d.0)[0], "Témoin Essentials : DÉSACTIVÉ");
+    // A command changes the state: the page shows it.
+    assert_eq!(run(&d.0, "off status"), ["Essentials Status: disabled"]);
+    assert_eq!(page_labels(&d.0)[0], "Essentials Status: OFF");
 
-    // Un clic sur la page change l'état : la commande le montre.
+    // A click on the page changes the state: the command shows it.
     page_click(&d.0, 0);
-    assert_eq!(run(&d.0, "list"), ["status : ACTIVÉ (Témoin Essentials)"]);
+    assert_eq!(run(&d.0, "list"), ["status: ON (Essentials Status)"]);
     assert!(status_on(&d.0));
 }
 
 #[test]
-fn une_page_par_module_du_registre() {
-    let d = Dir::new("registre");
+fn one_button_per_registry_module() {
+    let d = Dir::new("registry");
     start(&d.0);
     let labels = page_labels(&d.0);
-    assert_eq!(labels.len(), MODULES.len() + 2, "un bouton par module, puis recharger et réinitialiser");
+    assert_eq!(labels.len(), MODULES.len() + 2, "one button per module, then reload and reset");
     assert_eq!(run(&d.0, "list").len(), MODULES.len());
 }
 
 #[test]
-fn plusieurs_actions_successives_sont_toutes_sauvegardees() {
-    let d = Dir::new("rafale");
+fn several_successive_actions_are_all_saved() {
+    let d = Dir::new("burst");
     start(&d.0);
-    // Clics et commandes enchaînés sans attendre, pendant que le thread d'E/S écrit.
+    // Clicks and commands in a row without waiting, while the I/O thread writes.
     for i in 0..25 {
         page_click(&d.0, 0);
         run(&d.0, if i % 2 == 0 { "toggle status" } else { "on status" });
@@ -120,39 +120,39 @@ fn plusieurs_actions_successives_sont_toutes_sauvegardees() {
     let expected = state::with_existing(|s| s.config.clone()).unwrap();
     settle();
     let on_disk = store::load(&d.0);
-    assert_eq!(on_disk.config, expected, "le disque a la toute dernière modification");
+    assert_eq!(on_disk.config, expected, "the disk has the very last change");
     assert!(!on_disk.config.module(ModuleId::Status).on);
 }
 
 #[test]
-fn la_reinitialisation_globale_passe_par_la_confirmation() {
+fn full_reset_goes_through_confirmation() {
     let d = Dir::new("reset");
     start(&d.0);
     run(&d.0, "off status");
     let ask = run(&d.0, "reset");
-    assert!(ask[0].contains("TOUS les réglages"));
-    assert!(!status_on(&d.0), "rien n'est réinitialisé avant la confirmation");
-    assert_eq!(run(&d.0, "reset confirm"), ["Tous les réglages remis par défaut"]);
+    assert!(ask[0].contains("ALL Horizon Essentials settings"));
+    assert!(!status_on(&d.0), "nothing is reset before confirmation");
+    assert_eq!(run(&d.0, "reset confirm"), ["All settings reset to defaults"]);
     assert!(status_on(&d.0));
     settle();
-    assert!(store::load(&d.0).config.module(ModuleId::Status).on, "et c'est sauvegardé");
+    assert!(store::load(&d.0).config.module(ModuleId::Status).on, "and it is saved");
 }
 
 #[test]
-fn la_reinitialisation_depuis_la_page_demande_deux_clics() {
+fn reset_from_the_page_takes_two_clicks() {
     let d = Dir::new("reset-page");
     start(&d.0);
     run(&d.0, "off status");
     let reset = MODULES.len() + 1;
     page_click(&d.0, reset);
-    assert!(!status_on(&d.0), "premier clic : rien ne change");
-    assert!(page_labels(&d.0)[reset].starts_with("Confirmer (15 s)"));
+    assert!(!status_on(&d.0), "first click: nothing changes");
+    assert!(page_labels(&d.0)[reset].starts_with("Confirm (15 s)"));
     page_click(&d.0, reset);
-    assert!(status_on(&d.0), "second clic : tout est remis par défaut");
+    assert!(status_on(&d.0), "second click: everything is reset to defaults");
 }
 
 #[test]
-fn le_rechargement_relit_la_configuration_du_disque() {
+fn reload_reads_the_configuration_from_disk() {
     let d = Dir::new("reload");
     start(&d.0);
     let mut other = crate::game::essentials_config::Config::default();
@@ -161,15 +161,15 @@ fn le_rechargement_relit_la_configuration_du_disque() {
     run(&d.0, "reload");
     assert_eq!(state::with_existing(|s| s.wait_idle(WAIT)), Some(true));
     assert!(!status_on(&d.0));
-    assert_eq!(page_labels(&d.0)[0], "Témoin Essentials : DÉSACTIVÉ");
+    assert_eq!(page_labels(&d.0)[0], "Essentials Status: OFF");
 }
 
 #[test]
-fn un_module_inconnu_ne_change_rien() {
-    let d = Dir::new("inconnu");
+fn an_unknown_module_changes_nothing() {
+    let d = Dir::new("unknown");
     start(&d.0);
     let before = state::with_existing(|s| s.config.clone()).unwrap();
-    assert_eq!(run(&d.0, "off radar"), ["Module inconnu : radar (modules : status)"]);
-    assert_eq!(run(&d.0, "reset radar"), ["Module inconnu : radar (modules : status)"]);
+    assert_eq!(run(&d.0, "off radar"), ["Unknown module: radar (modules: status)"]);
+    assert_eq!(run(&d.0, "reset radar"), ["Unknown module: radar (modules: status)"]);
     assert_eq!(state::with_existing(|s| s.config.clone()).unwrap(), before);
 }

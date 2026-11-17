@@ -1,5 +1,5 @@
-// Chaque tick de la fenêtre (pas celui du serveur intégré) : les modules, puis
-// au plus un message du Core dans le chat, quand le joueur est dans un monde.
+// Every window tick (not the integrated server's): the modules, then at most one
+// Core message in the chat, when the player is in a world.
 fn essentials_tick(game: &mut crate::game::Game<'_>) {
     use crate::game::{essentials_events as ev, essentials_types as t};
     if !game.native_on(t::MOD_ID) || !game.native_window() {

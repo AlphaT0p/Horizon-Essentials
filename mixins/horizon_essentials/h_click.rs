@@ -1,5 +1,5 @@
-// Un clic sur la page de réglages : l'interface le traduit en Action, le Core l'applique.
-// Pendant le chargement de la configuration, un clic ne fait rien.
+// A click on the settings page: the UI turns it into an Action, the Core applies it.
+// While the configuration is loading, a click does nothing.
 fn essentials_click(game: &mut crate::game::Game<'_>, mod_id: &str, button: usize) {
     use crate::game::{essentials_events as ev, essentials_settings as ui, essentials_types as t};
     if mod_id != t::MOD_ID {

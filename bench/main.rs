@@ -1,8 +1,8 @@
-//! Protocole de mesure de Horizon Essentials (voir docs/performance.md).
+//! Horizon Essentials measurement protocol (see docs/performance.md).
 //!
-//! Compile les modules du bundle **hors mode test**, comme dans le jeu (sans les
-//! compteurs réservés aux tests), avec un allocateur qui compte les allocations
-//! du thread courant, puis exécute le protocole P1 à P4.
+//! Compiles the bundle modules **outside test mode**, as in the game (without the
+//! test-only counters), with an allocator that counts the current thread's
+//! allocations, then runs protocol P1 to P4.
 //!
 //!     cargo run --release --manifest-path bench/Cargo.toml
 
@@ -15,8 +15,8 @@ thread_local! {
 
 struct Counting;
 
-// SAFETY : délègue chaque appel à `System` tel quel ; le compteur est un `Cell`
-// local au thread, initialisé sans allocation.
+// SAFETY: forwards every call to `System` unchanged; the counter is a thread-local
+// `Cell`, initialized without allocating.
 unsafe impl GlobalAlloc for Counting {
     unsafe fn alloc(&self, l: Layout) -> *mut u8 {
         let _ = ALLOCS.try_with(|c| c.set(c.get() + 1));
@@ -34,13 +34,13 @@ unsafe impl GlobalAlloc for Counting {
 #[global_allocator]
 static ALLOCATOR: Counting = Counting;
 
-/// Les allocations faites par le thread courant depuis son début.
+/// The allocations made by the current thread since it started.
 pub fn allocs() -> u64 {
     ALLOCS.with(|c| c.get())
 }
 
-// Les modules du bundle, aux mêmes chemins que dans le jeu. Ce qui ne sert pas au
-// protocole n'est pas une erreur ici.
+// The bundle modules, at the same paths as in the game. What the protocol does
+// not use is not an error here.
 #[allow(dead_code)]
 pub mod game {
     #[path = "../../mixins/horizon_essentials/core_types.rs"]

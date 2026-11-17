@@ -1,5 +1,5 @@
-// Chaque frame de la fenêtre : le temps passe pour le Core (sauvegarde différée)
-// et pour les modules. La configuration est chargée à la première frame.
+// Every window frame: time passes for the Core (deferred saving) and for the
+// modules. The configuration is loaded on the first frame.
 fn essentials_frame(game: &mut crate::game::Game<'_>, elapsed: std::time::Duration) {
     use crate::game::{essentials_events as ev, essentials_types as t};
     if !game.native_on(t::MOD_ID) || !game.native_window() {

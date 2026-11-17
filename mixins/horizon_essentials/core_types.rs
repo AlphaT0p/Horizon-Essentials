@@ -1,26 +1,26 @@
-// Horizon Essentials : types partagés par le Core, l'interface et les modules.
-// Ce fichier devient le module crate::game::essentials_types du jeu, et un module
-// du banc de test (harness/lib.rs). Pas de `//!` ni d'attribut interne : le format
-// des bundles horizon-mixins les refuse.
+// Horizon Essentials: types shared by the Core, the UI and the modules.
+// This file becomes the game's crate::game::essentials_types module, and a module
+// of the test harness (harness/lib.rs). No `//!` and no inner attributes: the
+// horizon-mixins bundle format rejects them.
 
 use crate::game::essentials_config::ResolvedStyle;
 use crate::game::essentials_registry::ModuleId;
 
-/// L'id du mod : sa ligne dans Options > Mods et son dossier de données
+/// The mod id: its entry in Options > Mods and its data folder
 /// (horizon-mods/.horizon-mod-data/horizon_essentials/).
 pub const MOD_ID: &str = "horizon_essentials";
 pub const NAME: &str = "Horizon Essentials";
 pub const VERSION: &str = "0.1.0";
-pub const DESCRIPTION: &str = "Profils, widgets et réglages PvP en complément de Horizon.";
+pub const DESCRIPTION: &str = "Profiles, widgets and PvP settings that complement Horizon.";
 
-/// Le titre de la ligne dans Options > Mods.
+/// The title of the entry in Options > Mods.
 pub fn title() -> String {
     format!("{NAME} {VERSION}")
 }
 
 // ── Placement ───────────────────────────────────────────────────────────────
 
-/// Le point de l'écran auquel un widget est accroché.
+/// The point of the screen a widget is attached to.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Anchor {
@@ -49,7 +49,7 @@ impl Anchor {
         Anchor::BottomRight,
     ];
 
-    /// Le nom dans les fichiers de configuration.
+    /// The name in configuration files.
     pub fn key(self) -> &'static str {
         match self {
             Anchor::TopLeft => "top_left",
@@ -68,9 +68,9 @@ impl Anchor {
         Anchor::ALL.into_iter().find(|a| a.key() == key)
     }
 
-    /// Les coins, dans l'ordre de `horizon_client::extras::Corner`
-    /// (TopLeft, TopRight, BottomLeft, BottomRight) : en placement automatique,
-    /// le widget s'empile dans ce coin avec les boîtes de Horizon et des autres mods.
+    /// The corners, in the order of `horizon_client::extras::Corner`
+    /// (TopLeft, TopRight, BottomLeft, BottomRight): with automatic placement,
+    /// the widget stacks in that corner with the boxes of Horizon and other mods.
     pub fn corner_index(self) -> Option<usize> {
         match self {
             Anchor::TopLeft => Some(0),
@@ -81,7 +81,7 @@ impl Anchor {
         }
     }
 
-    /// La part de la place libre à gauche et au-dessus du widget (0, ½ ou 1).
+    /// The share of the free space to the left of and above the widget (0, ½ or 1).
     pub fn factors(self) -> (f32, f32) {
         match self {
             Anchor::TopLeft => (0.0, 0.0),
@@ -97,32 +97,32 @@ impl Anchor {
     }
 }
 
-// ── Actions : la seule façon pour l'interface de changer la configuration ──
+// ── Actions: the only way for the UI to change the configuration ─────────
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
     Toggle(ModuleId),
     Set(ModuleId, bool),
-    /// Remet les réglages par défaut d'un module (activation, placement, style).
+    /// Restores a module's default settings (enabled state, placement, style).
     ResetModule(ModuleId),
-    /// Remet toute la configuration par défaut.
+    /// Restores the whole default configuration.
     ResetAll,
-    /// Relit la configuration sur le disque.
+    /// Reads the configuration from disk again.
     Reload,
 }
 
-// ── Rendu : une liste de formes réutilisée d'une frame à l'autre ───────────
+// ── Rendering: a list of shapes reused from one frame to the next ──────────
 
-/// Une forme, en pixels GUI, relative au coin haut gauche du widget.
+/// A shape, in GUI pixels, relative to the widget's top-left corner.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Op {
     Fill { rect: [f32; 4], argb: u32 },
     Text { slot: usize, at: [f32; 2], rgb: u32, shadow: bool },
 }
 
-/// Ce qu'un widget dessine. `clear` garde la mémoire : une fois les premières
-/// frames passées, reconstruire la liste n'alloue plus rien (les textes sont
-/// recopiés dans des `String` déjà allouées).
+/// What a widget draws. `clear` keeps the memory: after the first frames,
+/// rebuilding the list no longer allocates (texts are copied into `String`s
+/// that are already allocated).
 #[derive(Debug, Default)]
 pub struct Shapes {
     ops: Vec<Op>,
@@ -163,7 +163,7 @@ impl Shapes {
         self.texts.get(slot).map_or("", String::as_str)
     }
 
-    /// La taille du widget, pour le placer.
+    /// The widget size, used to place it.
     pub fn size(&self) -> [f32; 2] {
         self.size
     }
@@ -173,18 +173,18 @@ impl Shapes {
     }
 }
 
-// ── L'interface commune des modules ─────────────────────────────────────────
+// ── The common module interface ─────────────────────────────────────────────
 
-/// Ce que le Core sait au moment d'un tick.
+/// What the Core knows at the time of a tick.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TickCtx {
     pub tick: u64,
     pub in_world: bool,
 }
 
-/// Ce qu'un widget reçoit pour se dessiner.
+/// What a widget receives to draw itself.
 pub struct WidgetCtx<'a> {
-    /// La largeur d'un texte en pixels GUI (`native_text_width` dans le jeu).
+    /// The width of a text in GUI pixels (`native_text_width` in the game).
     pub measure: &'a dyn Fn(&str) -> f32,
     pub style: ResolvedStyle,
     pub profile: &'a str,
@@ -192,19 +192,19 @@ pub struct WidgetCtx<'a> {
     pub total_modules: usize,
 }
 
-/// Un module d'Essentials. Toutes les méthodes ont un corps vide par défaut :
-/// un module n'écrit que celles dont il a besoin.
+/// An Essentials module. Every method has an empty default body:
+/// a module only writes the ones it needs.
 pub trait Module {
-    /// Une frame vient d'être dessinée.
+    /// A frame has just been drawn.
     fn on_frame(&mut self, _elapsed_ms: f32) {}
-    /// Un tick du jeu (20 par seconde).
+    /// A game tick (20 per second).
     fn on_tick(&mut self, _ctx: &TickCtx) {}
-    /// Une touche ou un bouton de souris, par son nom vanilla (`key.mouse.left`).
+    /// A key or a mouse button, by its vanilla name (`key.mouse.left`).
     fn on_key(&mut self, _key: &str, _down: bool) {}
-    /// Le module vient d'être activé ou désactivé : l'occasion de remettre son état à zéro.
+    /// The module has just been enabled or disabled: a chance to reset its state.
     fn on_enabled(&mut self, _on: bool) {}
-    /// Son widget, s'il en a un : le module le reconstruit seulement si ce qu'il
-    /// affiche a changé, et rend sinon la liste déjà prête.
+    /// Its widget, if it has one: the module rebuilds it only when what it shows
+    /// has changed, and otherwise returns the list that is already built.
     fn widget(&mut self, _ctx: &WidgetCtx<'_>) -> Option<&Shapes> {
         None
     }
@@ -215,27 +215,27 @@ mod tests {
     use super::*;
 
     #[test]
-    fn le_titre_contient_la_version() {
+    fn the_title_contains_the_version() {
         assert_eq!(title(), "Horizon Essentials 0.1.0");
     }
 
     #[test]
-    fn l_id_respecte_le_format_horizon() {
-        // a-z, 0-9 et _ uniquement (docs/mod-manifest).
+    fn the_id_follows_the_horizon_format() {
+        // a-z, 0-9 and _ only (docs/mod-manifest).
         assert!(MOD_ID.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_'));
     }
 
     #[test]
-    fn chaque_ancre_se_relit_par_son_nom() {
+    fn every_anchor_is_read_back_by_its_name() {
         for a in Anchor::ALL {
             assert_eq!(Anchor::from_key(a.key()), Some(a));
             assert_eq!(serde_json::to_string(&a).unwrap(), format!("\"{}\"", a.key()));
         }
-        assert_eq!(Anchor::from_key("nulle_part"), None);
+        assert_eq!(Anchor::from_key("nowhere"), None);
     }
 
     #[test]
-    fn les_coins_suivent_l_ordre_de_horizon() {
+    fn corners_follow_horizon_order() {
         assert_eq!(Anchor::TopLeft.corner_index(), Some(0));
         assert_eq!(Anchor::TopRight.corner_index(), Some(1));
         assert_eq!(Anchor::BottomLeft.corner_index(), Some(2));
@@ -244,17 +244,17 @@ mod tests {
     }
 
     #[test]
-    fn shapes_reutilise_ses_textes() {
+    fn shapes_reuses_its_texts() {
         let mut s = Shapes::default();
-        s.text("un", [0.0, 0.0], 0xFFFFFF, true);
+        s.text("one", [0.0, 0.0], 0xFFFFFF, true);
         s.fill([0.0, 0.0, 1.0, 1.0], 0x7800_0000);
         let capacity = s.texts[0].capacity();
         s.clear();
-        s.text("deux", [1.0, 2.0], 0, false);
-        assert_eq!(s.texts.len(), 1, "le texte reprend l'emplacement existant");
+        s.text("two", [1.0, 2.0], 0, false);
+        assert_eq!(s.texts.len(), 1, "the text reuses the existing slot");
         assert!(s.texts[0].capacity() >= capacity);
         assert_eq!(s.ops(), &[Op::Text { slot: 0, at: [1.0, 2.0], rgb: 0, shadow: false }]);
-        assert_eq!(s.text_of(0), "deux");
+        assert_eq!(s.text_of(0), "two");
         assert_eq!(s.text_of(9), "");
     }
 }

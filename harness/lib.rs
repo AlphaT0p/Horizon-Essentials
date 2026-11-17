@@ -1,11 +1,11 @@
-//! Banc de test de Horizon Essentials.
+//! Horizon Essentials test harness.
 //!
-//! Le jeu ajoute chaque fichier du bundle comme module `crate::game::essentials_*`.
-//! Ce crate reproduit les mêmes chemins pour que `cargo test` compile et teste les
-//! modules sans Horizon. Les helpers (`h_*.rs`) ne sont pas compilés ici : ils
-//! appellent le jeu, et sont vérifiés par `native.py check`.
+//! The game adds each bundle file as a `crate::game::essentials_*` module.
+//! This crate reproduces the same paths so that `cargo test` compiles and tests
+//! the modules without Horizon. The helpers (`h_*.rs`) are not compiled here: they
+//! call the game, and are checked by `native.py check`.
 //!
-//! Chaque module ajouté à `horizon-mixin.toml` doit l'être ici aussi, avec le même nom.
+//! Every module added to `horizon-mixin.toml` must be added here too, with the same name.
 
 pub mod game {
     #[path = "../../mixins/horizon_essentials/core_types.rs"]
@@ -33,15 +33,15 @@ pub mod game {
 #[cfg(test)]
 mod integration;
 
-/// Le nombre d'allocations faites par le thread courant depuis son début.
+/// The number of allocations made by the current thread since it started.
 #[cfg(test)]
 pub fn allocations() -> u64 {
     counting::ALLOCATIONS.with(|c| c.get())
 }
 
-// Les tests de performance comptent les allocations du thread courant : un
-// allocateur qui délègue à celui du système et incrémente un compteur par thread
-// (les autres threads, dont celui d'E/S, ne sont pas comptés).
+// The performance tests count the current thread's allocations: an allocator
+// that forwards to the system one and increments a per-thread counter
+// (other threads, including the I/O thread, are not counted).
 #[cfg(test)]
 mod counting {
     use std::alloc::{GlobalAlloc, Layout, System};
@@ -53,8 +53,8 @@ mod counting {
 
     pub struct Counting;
 
-    // SAFETY : délègue chaque appel à `System` tel quel ; le compteur est un
-    // `Cell` local au thread, initialisé sans allocation.
+    // SAFETY: forwards every call to `System` unchanged; the counter is a
+    // thread-local `Cell`, initialized without allocating.
     unsafe impl GlobalAlloc for Counting {
         unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
             let _ = ALLOCATIONS.try_with(|c| c.set(c.get() + 1));

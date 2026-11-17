@@ -1,15 +1,15 @@
-// Horizon Essentials : la commande /essentials (crate::game::essentials_command).
-// Comme la page de réglages, elle ne change rien elle-même : elle rend des lignes
-// pour le chat et, s'il y a lieu, une `Action` que le Core applique.
+// Horizon Essentials: the /essentials command (crate::game::essentials_command).
+// Like the settings page, it changes nothing itself: it returns lines for the
+// chat and, when needed, an `Action` that the Core applies.
 //
-//   /essentials                      état (version, profil, modules actifs)
-//   /essentials list                 les modules
-//   /essentials on|off|toggle <mod>  activer, désactiver, basculer
-//   /essentials reset                TOUT remettre par défaut, après confirmation :
-//   /essentials reset confirm          à taper dans les 15 secondes
-//   /essentials reset <mod>          un seul module
-//   /essentials reload               relire la configuration
-//   /essentials help                 cette aide
+//   /essentials                      status (version, profile, enabled modules)
+//   /essentials list                 the modules
+//   /essentials on|off|toggle <mod>  enable, disable, toggle
+//   /essentials reset                reset EVERYTHING to defaults, after confirmation:
+//   /essentials reset confirm          to be typed within 15 seconds
+//   /essentials reset <mod>          a single module
+//   /essentials reload               read the configuration again
+//   /essentials help                 this help
 
 use std::cell::Cell;
 use std::time::{Duration, Instant};
@@ -20,13 +20,13 @@ use crate::game::essentials_registry::{COUNT, MODULES, ModuleId};
 use crate::game::essentials_types::{Action, VERSION};
 
 pub const NAME: &str = "essentials";
-/// La réponse à toute commande tant que la configuration est en cours de chargement.
-pub const LOADING: &str = "Chargement de la configuration… réessaie dans un instant.";
-/// Le délai pour confirmer une réinitialisation complète.
+/// The reply to any command while the configuration is loading.
+pub const LOADING: &str = "Loading the configuration… try again in a moment.";
+/// The delay to confirm a full reset.
 pub const RESET_DELAY: Duration = Duration::from_secs(15);
 
 thread_local! {
-    // Le moment de la dernière demande `/essentials reset` pas encore confirmée.
+    // The time of the last `/essentials reset` request not yet confirmed.
     static RESET_ASKED: Cell<Option<Instant>> = const { Cell::new(None) };
 }
 
@@ -36,19 +36,19 @@ pub struct Reply {
     pub action: Option<Action>,
 }
 
-/// Les arguments si `command` (sans le `/`) est la nôtre, sinon None.
+/// The arguments if `command` (without the `/`) is ours, otherwise None.
 pub fn ours(command: &str) -> Option<&str> {
     let rest = command.strip_prefix(NAME)?;
     if rest.is_empty() || rest.starts_with(' ') { Some(rest.trim()) } else { None }
 }
 
-/// Exécute la commande sur l'instantané du Core. Pendant le chargement, rien
-/// n'est modifié : la réponse est `LOADING`.
+/// Runs the command on the Core snapshot. While loading, nothing is changed:
+/// the reply is `LOADING`.
 pub fn run(args: &str, snapshot: Option<Snapshot<'_>>) -> Reply {
     run_at(args, snapshot, Instant::now())
 }
 
-/// `run`, à l'instant `now` (les tests avancent le temps sans attendre).
+/// `run`, at time `now` (tests move time forward without waiting).
 pub fn run_at(args: &str, snapshot: Option<Snapshot<'_>>, now: Instant) -> Reply {
     let Some(Snapshot { resolved, profile }) = snapshot else {
         return Reply { lines: vec![LOADING.to_owned()], action: None };
@@ -56,21 +56,21 @@ pub fn run_at(args: &str, snapshot: Option<Snapshot<'_>>, now: Instant) -> Reply
     let mut words = args.split_whitespace();
     let verb = words.next().unwrap_or("");
     let target = words.next();
-    // Toute commande consomme une demande de réinitialisation en attente : seule
-    // `reset confirm`, tapée juste après et dans le délai, la confirme.
+    // Any command consumes a pending reset request: only `reset confirm`, typed
+    // right after and within the delay, confirms it.
     let asked = RESET_ASKED.take().filter(|at| now.saturating_duration_since(*at) <= RESET_DELAY);
     let mut reply = Reply::default();
     let mut say = |line: String| reply.lines.push(line);
     let module = |key: Option<&str>| key.and_then(ModuleId::from_key);
     match (verb, target) {
         ("", _) | ("status", _) => say(format!(
-            "Horizon Essentials {VERSION} - profil {profile} - {}/{COUNT} modules actifs",
+            "Horizon Essentials {VERSION} - profile {profile} - {}/{COUNT} modules enabled",
             resolved.active_count()
         )),
         ("list", _) => {
             for d in MODULES {
-                let on = if resolved.on[d.id.index()] { "ACTIVÉ" } else { "désactivé" };
-                say(format!("{} : {on} ({})", d.key, d.name));
+                let on = if resolved.on[d.id.index()] { "ON" } else { "off" };
+                say(format!("{}: {on} ({})", d.key, d.name));
             }
         }
         ("on" | "off" | "toggle", Some(key)) => match module(Some(key)) {
@@ -85,14 +85,14 @@ pub fn run_at(args: &str, snapshot: Option<Snapshot<'_>>, now: Instant) -> Reply
         },
         ("reset", None | Some("all")) => {
             RESET_ASKED.set(Some(now));
-            say("Attention : TOUS les réglages de Horizon Essentials (tous les modules, placements".to_owned());
-            say("et couleurs) seront remis par défaut. Pour confirmer, tape dans les 15 secondes :".to_owned());
+            say("Warning: ALL Horizon Essentials settings (every module, position and color)".to_owned());
+            say("will be reset to defaults. To confirm, type within 15 seconds:".to_owned());
             say(format!("/{NAME} reset confirm"));
         }
         ("reset", Some("confirm")) => match asked {
             Some(_) => reply.action = Some(Action::ResetAll),
             None => say(format!(
-                "Aucune réinitialisation à confirmer (pas de demande, ou plus de 15 secondes). Tape d'abord /{NAME} reset."
+                "No reset to confirm (no request, or more than 15 seconds ago). Type /{NAME} reset first."
             )),
         },
         ("reset", Some(key)) => match module(Some(key)) {
@@ -102,35 +102,35 @@ pub fn run_at(args: &str, snapshot: Option<Snapshot<'_>>, now: Instant) -> Reply
         ("reload", _) => reply.action = Some(Action::Reload),
         ("help", _) => help(&mut reply.lines),
         _ => {
-            say(format!("Commande inconnue : /{NAME} {args}"));
+            say(format!("Unknown command: /{NAME} {args}"));
             help(&mut reply.lines);
         }
     }
     reply
 }
 
-/// Ce que l'action a fait, pour le chat (après qu'elle a été appliquée).
+/// What the action did, for the chat (after it was applied).
 pub fn outcome(action: Action, changed: bool, resolved: &Resolved) -> String {
-    let state = |id: ModuleId| if resolved.on[id.index()] { "activé" } else { "désactivé" };
+    let state = |id: ModuleId| if resolved.on[id.index()] { "enabled" } else { "disabled" };
     match action {
-        Action::Toggle(id) | Action::Set(id, _) if changed => format!("{} : {}", id.descriptor().name, state(id)),
-        Action::Toggle(id) | Action::Set(id, _) => format!("{} : déjà {}", id.descriptor().name, state(id)),
-        Action::ResetModule(id) => format!("{} : réglages par défaut", id.descriptor().name),
-        Action::ResetAll => "Tous les réglages remis par défaut".to_owned(),
-        // `reload` écrit lui-même « configuration rechargée ».
+        Action::Toggle(id) | Action::Set(id, _) if changed => format!("{}: {}", id.descriptor().name, state(id)),
+        Action::Toggle(id) | Action::Set(id, _) => format!("{}: already {}", id.descriptor().name, state(id)),
+        Action::ResetModule(id) => format!("{}: default settings", id.descriptor().name),
+        Action::ResetAll => "All settings reset to defaults".to_owned(),
+        // `reload` writes "configuration reloaded" itself.
         Action::Reload => String::new(),
     }
 }
 
 fn unknown(key: &str) -> String {
     let keys: Vec<&str> = MODULES.iter().map(|d| d.key).collect();
-    format!("Module inconnu : {key} (modules : {})", keys.join(", "))
+    format!("Unknown module: {key} (modules: {})", keys.join(", "))
 }
 
 fn help(lines: &mut Vec<String>) {
     lines.push(format!("/{NAME} [status|list|help|reload]"));
     lines.push(format!("/{NAME} on|off|toggle <module>"));
-    lines.push(format!("/{NAME} reset <module> : un module ; /{NAME} reset : tout (avec confirmation)"));
+    lines.push(format!("/{NAME} reset <module>: one module; /{NAME} reset: everything (with confirmation)"));
 }
 
 #[cfg(test)]
@@ -148,14 +148,14 @@ mod tests {
     }
 
     #[test]
-    fn pendant_le_chargement_rien_n_est_modifie() {
+    fn nothing_changes_while_loading() {
         let reply = run("off status", None);
         assert_eq!(reply.lines, [LOADING]);
         assert_eq!(reply.action, None);
     }
 
     #[test]
-    fn reconnait_seulement_sa_commande() {
+    fn recognizes_only_its_own_command() {
         assert_eq!(ours("essentials"), Some(""));
         assert_eq!(ours("essentials  list "), Some("list"));
         assert_eq!(ours("essentialsx"), None);
@@ -163,11 +163,11 @@ mod tests {
     }
 
     #[test]
-    fn etat_et_liste() {
+    fn status_and_list() {
         let reply = go("", "default");
-        assert_eq!(reply.lines, ["Horizon Essentials 0.1.0 - profil default - 1/1 modules actifs"]);
+        assert_eq!(reply.lines, ["Horizon Essentials 0.1.0 - profile default - 1/1 modules enabled"]);
         assert_eq!(reply.action, None);
-        assert_eq!(go("list", "default").lines, ["status : ACTIVÉ (Témoin Essentials)"]);
+        assert_eq!(go("list", "default").lines, ["status: ON (Essentials Status)"]);
     }
 
     #[test]
@@ -185,28 +185,28 @@ mod tests {
     }
 
     #[test]
-    fn reset_global_demande_une_confirmation_de_15_secondes() {
+    fn full_reset_asks_for_a_15_second_confirmation() {
         let t0 = Instant::now();
         let ask = at("reset", t0);
-        assert_eq!(ask.action, None, "la demande seule ne réinitialise rien");
-        assert!(ask.lines[0].contains("TOUS les réglages"), "l'avertissement est explicite");
+        assert_eq!(ask.action, None, "the request alone resets nothing");
+        assert!(ask.lines[0].contains("ALL Horizon Essentials settings"), "the warning is explicit");
         assert_eq!(ask.lines[2], "/essentials reset confirm");
         assert_eq!(at("reset confirm", t0 + Duration::from_secs(14)).action, Some(Action::ResetAll));
-        // La confirmation ne sert qu'une fois.
+        // The confirmation works only once.
         assert_eq!(at("reset confirm", t0 + Duration::from_secs(15)).action, None);
     }
 
     #[test]
-    fn reset_global_expire_apres_15_secondes() {
+    fn full_reset_expires_after_15_seconds() {
         let t0 = Instant::now();
         at("reset all", t0);
         let late = at("reset confirm", t0 + Duration::from_secs(16));
         assert_eq!(late.action, None);
-        assert!(late.lines[0].starts_with("Aucune réinitialisation à confirmer"));
+        assert!(late.lines[0].starts_with("No reset to confirm"));
     }
 
     #[test]
-    fn une_autre_commande_annule_la_demande() {
+    fn another_command_cancels_the_request() {
         let t0 = Instant::now();
         at("reset", t0);
         at("list", t0 + Duration::from_secs(1));
@@ -214,44 +214,44 @@ mod tests {
     }
 
     #[test]
-    fn confirmer_sans_demande_ne_fait_rien() {
+    fn confirming_without_a_request_does_nothing() {
         let t0 = Instant::now();
         at("list", t0);
         assert_eq!(at("reset confirm", t0).action, None);
     }
 
     #[test]
-    fn reset_d_un_module_verifie_son_nom() {
+    fn module_reset_checks_its_name() {
         assert_eq!(go("reset status", "d").action, Some(Action::ResetModule(ModuleId::Status)));
         let reply = go("reset radar", "d");
         assert_eq!(reply.action, None);
-        assert_eq!(reply.lines, ["Module inconnu : radar (modules : status)"]);
+        assert_eq!(reply.lines, ["Unknown module: radar (modules: status)"]);
     }
 
     #[test]
-    fn aucun_module_ne_porte_un_mot_reserve() {
+    fn no_module_uses_a_reserved_word() {
         for d in MODULES {
-            assert!(!["all", "confirm"].contains(&d.key), "« {} » masquerait /essentials reset", d.key);
+            assert!(!["all", "confirm"].contains(&d.key), "\"{}\" would hide /essentials reset", d.key);
         }
     }
 
     #[test]
-    fn erreurs_sans_action() {
+    fn errors_without_action() {
         let reply = go("off radar", "d");
         assert_eq!(reply.action, None);
-        assert_eq!(reply.lines, ["Module inconnu : radar (modules : status)"]);
-        let reply = go("danse", "d");
+        assert_eq!(reply.lines, ["Unknown module: radar (modules: status)"]);
+        let reply = go("dance", "d");
         assert_eq!(reply.action, None);
         assert_eq!(reply.lines.len(), 4);
-        assert_eq!(go("off", "d").action, None, "sans module : aide");
+        assert_eq!(go("off", "d").action, None, "without a module: help");
     }
 
     #[test]
-    fn compte_rendu() {
+    fn outcome_report() {
         let mut c = Config::default();
         let changed = c.apply(Action::Set(ModuleId::Status, false));
         let res = c.resolve();
-        assert_eq!(outcome(Action::Set(ModuleId::Status, false), changed, &res), "Témoin Essentials : désactivé");
-        assert_eq!(outcome(Action::Set(ModuleId::Status, false), false, &res), "Témoin Essentials : déjà désactivé");
+        assert_eq!(outcome(Action::Set(ModuleId::Status, false), changed, &res), "Essentials Status: disabled");
+        assert_eq!(outcome(Action::Set(ModuleId::Status, false), false, &res), "Essentials Status: already disabled");
     }
 }

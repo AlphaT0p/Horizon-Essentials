@@ -1,8 +1,8 @@
-// Horizon Essentials : la répartition des événements (crate::game::essentials_events).
+// Horizon Essentials: event dispatch (crate::game::essentials_events).
 //
-// Les helpers h_*.rs appellent ces fonctions et rien d'autre du Core. Elles ne
-// connaissent pas le jeu : ce qu'il faut du jeu leur est passé en paramètre
-// (le dossier de données, une mesure de texte, de quoi placer et peindre).
+// The h_*.rs helpers call these functions and nothing else of the Core. They do
+// not know the game: what they need from it is passed as parameters
+// (the data folder, a text measurement, a way to place and paint).
 
 use std::path::PathBuf;
 
@@ -12,8 +12,8 @@ use crate::game::essentials_registry::{COUNT, ModuleId};
 use crate::game::essentials_state::{self as state};
 use crate::game::essentials_types::{Action, Shapes, TickCtx, WidgetCtx};
 
-/// Une frame (sur la fenêtre). À la première, demande la lecture de la configuration
-/// au thread d'E/S ; ensuite, relit ses réponses sans attendre. Aucun accès disque ici.
+/// A frame (on the window). On the first one, asks the I/O thread to read the
+/// configuration; after that, picks up its replies without waiting. No disk access here.
 pub fn frame(dir: impl FnOnce() -> PathBuf, elapsed_ms: f32) {
     state::with(dir, |s| {
         s.advance(elapsed_ms);
@@ -28,8 +28,8 @@ pub fn frame(dir: impl FnOnce() -> PathBuf, elapsed_ms: f32) {
     });
 }
 
-/// Un tick. Rend le prochain message à écrire dans le chat, quand le joueur est
-/// dans un monde (au plus un par tick).
+/// A tick. Returns the next message to write in the chat, when the player is
+/// in a world (at most one per tick).
 pub fn tick(dir: impl FnOnce() -> PathBuf, in_world: bool) -> Option<String> {
     state::with(dir, |s| {
         s.tick += 1;
@@ -46,7 +46,7 @@ pub fn tick(dir: impl FnOnce() -> PathBuf, in_world: bool) -> Option<String> {
     .flatten()
 }
 
-/// Une touche ou un bouton de souris, par son nom vanilla.
+/// A key or a mouse button, by its vanilla name.
 pub fn key(dir: impl FnOnce() -> PathBuf, key: &str, down: bool) {
     state::with(dir, |s| {
         if !s.loaded {
@@ -60,30 +60,29 @@ pub fn key(dir: impl FnOnce() -> PathBuf, key: &str, down: bool) {
     });
 }
 
-/// Fermeture du jeu : le dernier changement est écrit avant la sortie (le thread
-/// d'E/S a au plus `SHUTDOWN_TIMEOUT` pour finir). Ne démarre rien si le Core n'a
-/// jamais tourné.
+/// Game shutdown: the last change is written before exiting (the I/O thread has
+/// at most `SHUTDOWN_TIMEOUT` to finish). Starts nothing if the Core never ran.
 pub fn shutdown() {
     state::with_existing(|s| s.shutdown());
 }
 
-/// Applique une action venue de l'interface ou d'une commande.
+/// Applies an action coming from the UI or from a command.
 pub fn apply(dir: impl FnOnce() -> PathBuf, action: Action) -> bool {
     state::with(dir, |s| s.apply(action)).unwrap_or(false)
 }
 
-/// Ce que l'interface peut lire du Core, en lecture seule : la configuration
-/// résolue et le profil actif. La page de réglages et la commande lisent toutes
-/// deux cet instantané : elles montrent toujours le même état.
+/// What the UI can read from the Core, read-only: the resolved configuration
+/// and the active profile. The settings page and the command both read this
+/// snapshot, so they always show the same state.
 #[derive(Clone, Copy, Debug)]
 pub struct Snapshot<'a> {
     pub resolved: &'a Resolved,
     pub profile: &'a str,
 }
 
-/// Donne à `f` l'instantané du Core, ou None tant que la configuration est en
-/// cours de chargement (l'interface affiche alors « Chargement… » et ne propose
-/// aucune modification). Le résultat est None si l'état est déjà emprunté.
+/// Gives `f` the Core snapshot, or None while the configuration is loading
+/// (the UI then shows "Loading…" and offers no change). The result is None if
+/// the state is already borrowed.
 pub fn view<R>(dir: impl FnOnce() -> PathBuf, f: impl FnOnce(Option<Snapshot<'_>>) -> R) -> Option<R> {
     state::with(dir, |s| {
         let snapshot = s.loaded.then_some(Snapshot { resolved: &s.resolved, profile: &s.profile });
@@ -91,15 +90,15 @@ pub fn view<R>(dir: impl FnOnce() -> PathBuf, f: impl FnOnce(Option<Snapshot<'_>
     })
 }
 
-/// Dessine les widgets actifs.
-/// - `screen` : la taille de l'écran en pixels GUI ;
-/// - `measure` : la largeur d'un texte ;
-/// - `place_corner(coin, w, h)` : la place dans un coin (0 haut gauche, 1 haut droit,
-///   2 bas gauche, 3 bas droit), ou None si le coin est pris (écran F3) ;
-/// - `paint(formes, position)` : peint les formes.
+/// Draws the active widgets.
+/// - `screen`: the screen size in GUI pixels;
+/// - `measure`: the width of a text;
+/// - `place_corner(corner, w, h)`: the position in a corner (0 top left, 1 top right,
+///   2 bottom left, 3 bottom right), or None if the corner is taken (F3 screen);
+/// - `paint(shapes, position)`: paints the shapes.
 ///
-/// Ne lit jamais le disque : tant que la configuration n'est pas chargée, rien
-/// n'est dessiné (pas de widget qui apparaît puis disparaît).
+/// Never reads the disk: until the configuration is loaded, nothing is drawn
+/// (no widget that appears and then disappears).
 pub fn hud(
     screen: [f32; 2],
     measure: &dyn Fn(&str) -> f32,
@@ -146,7 +145,7 @@ mod tests {
 
     const WAIT: Duration = Duration::from_secs(5);
 
-    /// Première frame, puis attente de la fin du chargement asynchrone.
+    /// First frame, then wait for the asynchronous loading to finish.
     fn started(dir: &std::path::Path) {
         frame(|| dir.to_path_buf(), 16.0);
         assert_eq!(state::with_existing(|s| s.wait_idle(WAIT)), Some(true));
@@ -162,8 +161,8 @@ mod tests {
     }
 
     #[test]
-    fn le_hud_suit_l_activation_et_les_coins() {
-        let d = TempDir::new("evenements-hud");
+    fn the_hud_follows_enabling_and_corners() {
+        let d = TempDir::new("events-hud");
         let dir = d.0.clone();
         started(&dir);
         let measure = |s: &str| s.len() as f32 * 6.0;
@@ -181,17 +180,17 @@ mod tests {
             );
         };
         draw_once(&mut corners, &mut painted);
-        assert_eq!(corners, [1], "le témoin s'empile en haut à droite");
+        assert_eq!(corners, [1], "the status box stacks at the top right");
         assert_eq!(painted, ["Essentials 0.1.0 - default - 1/1 @ [300.0, 2.0]"]);
 
         assert!(apply(|| dir.clone(), Action::Toggle(ModuleId::Status)));
         draw_once(&mut corners, &mut painted);
-        assert_eq!(painted.len(), 1, "désactivé : plus rien n'est dessiné");
+        assert_eq!(painted.len(), 1, "disabled: nothing is drawn any more");
     }
 
     #[test]
-    fn un_coin_pris_cache_le_widget() {
-        let d = TempDir::new("evenements-coin");
+    fn a_taken_corner_hides_the_widget() {
+        let d = TempDir::new("events-corner");
         let dir = d.0.clone();
         started(&dir);
         let mut painted = 0;
@@ -200,44 +199,44 @@ mod tests {
     }
 
     #[test]
-    fn rien_n_est_dessine_avant_la_fin_du_chargement() {
+    fn nothing_is_drawn_before_loading_ends() {
         let mut painted = 0;
         draw(&mut painted);
-        assert_eq!(painted, 0, "avant la première frame");
-        let d = TempDir::new("evenements-attente");
+        assert_eq!(painted, 0, "before the first frame");
+        let d = TempDir::new("events-waiting");
         let dir = d.0.clone();
         frame(|| dir.clone(), 16.0);
         let loaded = state::with_existing(|s| s.loaded).unwrap();
         draw(&mut painted);
-        assert_eq!(painted > 0, loaded, "le HUD n'affiche rien tant que la configuration n'est pas lue");
+        assert_eq!(painted > 0, loaded, "the HUD shows nothing until the configuration has been read");
         state::with_existing(|s| s.wait_idle(WAIT));
         draw(&mut painted);
-        assert!(painted > 0, "puis le témoin apparaît");
+        assert!(painted > 0, "then the status box appears");
     }
 
     #[test]
-    fn les_messages_attendent_le_monde() {
-        let d = TempDir::new("evenements-messages");
-        std::fs::write(d.0.join("active"), "Interdit").unwrap();
+    fn messages_wait_for_the_world() {
+        let d = TempDir::new("events-messages");
+        std::fs::write(d.0.join("active"), "Forbidden").unwrap();
         let dir = d.0.clone();
         started(&dir);
-        assert_eq!(tick(|| dir.clone(), false), None, "pas encore dans un monde");
-        let m = tick(|| dir.clone(), true).expect("un avertissement");
-        assert!(m.contains("profil actif invalide"));
+        assert_eq!(tick(|| dir.clone(), false), None, "not in a world yet");
+        let m = tick(|| dir.clone(), true).expect("a warning");
+        assert!(m.contains("invalid active profile"));
         assert_eq!(tick(|| dir.clone(), true), None);
     }
 
     #[test]
-    fn view_ne_donne_rien_pendant_le_chargement() {
-        let d = TempDir::new("evenements-view");
+    fn view_gives_nothing_while_loading() {
+        let d = TempDir::new("events-view");
         let dir = d.0.clone();
-        // Premier accès : la lecture vient d'être demandée au thread d'E/S.
+        // First access: the read has just been requested from the I/O thread.
         let first = view(|| dir.clone(), |snap| snap.is_some()).unwrap();
         let loaded = state::with_existing(|s| s.loaded).unwrap();
-        assert_eq!(first, loaded, "pas d'instantané tant que la configuration n'est pas lue");
+        assert_eq!(first, loaded, "no snapshot until the configuration has been read");
         state::with_existing(|s| s.wait_idle(WAIT));
         let (on, profile) = view(|| dir.clone(), |snap| {
-            let snap = snap.expect("chargée");
+            let snap = snap.expect("loaded");
             (snap.resolved.on[ModuleId::Status.index()], snap.profile.to_owned())
         })
         .unwrap();
@@ -245,11 +244,11 @@ mod tests {
         assert_eq!(profile, "default");
     }
 
-    // ── Non-régression des performances ─────────────────────────────────────
+    // ── Performance regression tests ────────────────────────────────────────
 
     #[test]
-    fn zero_allocation_par_frame() {
-        let d = TempDir::new("evenements-alloc");
+    fn zero_allocations_per_frame() {
+        let d = TempDir::new("events-alloc");
         let dir = d.0.clone();
         started(&dir);
         let mut painted = 0;
@@ -264,14 +263,14 @@ mod tests {
             let _ = tick(|| dir.clone(), true);
             key(|| dir.clone(), "key.mouse.left", true);
         }
-        assert_eq!(crate::allocations() - before, 0, "une frame, un tick ou une touche a alloué");
+        assert_eq!(crate::allocations() - before, 0, "a frame, a tick or a key press allocated");
         assert!(painted > 0);
     }
 
     #[test]
-    fn un_module_desactive_n_est_jamais_appele() {
+    fn a_disabled_module_is_never_called() {
         use crate::game::essentials_registry::calls;
-        let d = TempDir::new("evenements-desactive");
+        let d = TempDir::new("events-disabled");
         let dir = d.0.clone();
         started(&dir);
         assert!(apply(|| dir.clone(), Action::Set(ModuleId::Status, false)));
@@ -283,30 +282,30 @@ mod tests {
             let _ = tick(|| dir.clone(), true);
             key(|| dir.clone(), "key.keyboard.w", true);
         }
-        assert_eq!(calls(ModuleId::Status), before, "le module désactivé a été appelé");
+        assert_eq!(calls(ModuleId::Status), before, "the disabled module was called");
         assert_eq!(painted, 0);
         assert!(apply(|| dir.clone(), Action::Set(ModuleId::Status, true)));
         draw(&mut painted);
-        assert!(calls(ModuleId::Status) > before, "réactivé, il est de nouveau appelé");
+        assert!(calls(ModuleId::Status) > before, "re-enabled, it is called again");
     }
 
     #[test]
-    fn aucune_operation_disque_sur_le_thread_du_jeu() {
+    fn no_disk_operation_on_the_game_thread() {
         use crate::game::essentials_store::DISK_OPS;
-        let d = TempDir::new("evenements-disque");
+        let d = TempDir::new("events-disk");
         let dir = d.0.clone();
         let before = DISK_OPS.with(|c| c.get());
         started(&dir);
         let mut painted = 0;
-        // Un changement puis 2 s de frames : la sauvegarde a lieu pendant la boucle.
+        // A change, then 2 s of frames: the save happens during the loop.
         assert!(apply(|| dir.clone(), Action::Toggle(ModuleId::Status)));
         for _ in 0..2000 {
             frame(|| dir.clone(), 1.0);
             draw(&mut painted);
         }
         assert_eq!(state::with_existing(|s| s.wait_idle(WAIT)), Some(true));
-        assert_eq!(DISK_OPS.with(|c| c.get()), before, "le thread du jeu a touché le disque");
+        assert_eq!(DISK_OPS.with(|c| c.get()), before, "the game thread touched the disk");
         let file = crate::game::essentials_store::profile_path(&dir, "default");
-        assert!(file.exists(), "la sauvegarde a bien été faite, par le thread d'E/S");
+        assert!(file.exists(), "the save was done, by the I/O thread");
     }
 }

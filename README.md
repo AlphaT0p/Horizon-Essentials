@@ -50,6 +50,4 @@ Checking against Horizon's source and building the game: see [docs/environnement
 - [Development environment](docs/environnement.md)
 - [Performance](docs/performance.md)
 
-The in-game text and the code comments are currently in French.
-
 Personal and learning project, not affiliated with Horizon, Mojang or Microsoft. MIT License.
