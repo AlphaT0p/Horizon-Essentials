@@ -12,6 +12,18 @@ Mis en place et testé le 2026-11-16.
 | Horizon installé | Nightly 2026-11-13 · `9f42064` (`NATIVE_HOOKS_API = 415`) | cible |
 | Instance de test | `essentials-dev` (« Essentials Dev ») | reçoit les builds ; l'instance « Horizon » n'est jamais touchée |
 
+## Boucle de développement
+
+1. `cargo test` et `cargo clippy --all-targets -- -D warnings` (secondes).
+2. `native.py check` dans Ubuntu (1 à 3 min) : le projet y est relié par un lien symbolique
+   `~/horizon-mods/native/horizon-essentials -> /mnt/c/Users/<toi>/Desktop/Horizon-Essentials`.
+3. `native-build` du launcher dans l'instance `essentials-dev` (environ 14 min : 4 min d'application
+   des mixins, 5 min de compilation, 4,5 min d'installation d'une copie de 1,3 Go).
+4. Après un build, **fermer complètement la fenêtre du launcher** puis la rouvrir : une fenêtre ouverte
+   avant le build garde l'ancienne liste de versions et lance l'ancien binaire.
+5. Le **premier** lancement d'un nouveau build prend environ 1 minute (cache de données reconstruit,
+   voir [performance.md](performance.md)) ; les suivants environ 5 s.
+
 ## Pièges rencontrés
 
 - Les chemins trop longs (> 260 caractères) cassent `cargo` sous Windows : travailler dans un dossier au chemin court.

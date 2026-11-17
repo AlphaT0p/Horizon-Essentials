@@ -20,6 +20,13 @@ Rien ici n'est supposé : si une fonction n'est pas dans ce tableau, elle n'est 
 | `native_screen_mouse_button_pressed_pre` | `(&self, screen, button: i32, modifiers: u32, canceled: &mut bool)` — API 80 | éditeur |
 | `native_screen_mouse_dragged_pre` (v1) | `(&self, screen, button, delta: [f32;2], modifiers, canceled)` | éditeur (la v2 est « pending », à éviter) |
 | `native_screen_mouse_scrolled_pre` (v1) | `(&self, screen, scroll: [f64;2], modifiers, canceled)` | éditeur (taille) |
+| `native_screen_key_pressed_pre` | `(&self, screen, key: &str, repeat: bool, modifiers: u32, canceled: &mut bool)` | menu Échap |
+| `native_client_stopping` | `(&self)` — « Once before this client's final save/exit. A mod can flush and join its worker here. » Appelé par `save_for_exit` (`game/world_session.rs`), une fois, fenêtre seulement | sauvegarde à la fermeture |
+
+`NativeScreenView` (`horizon-client/src/mod_api.rs`) : `id` (stable : `paused` pour le menu Échap,
+`inventory`, `options`, `title`…), `menu`, `title`, `rect`, `slots`, `mouse`, `partial_tick`.
+`native_mod_screen_open` n'ouvre l'écran d'un mod que depuis le jeu sans écran (`mod_screen_opens`) :
+impossible depuis le menu Échap, d'où le panneau dessiné sur ce menu.
 
 ## Helpers
 

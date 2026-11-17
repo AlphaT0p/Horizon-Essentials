@@ -1,55 +1,85 @@
-# Architecture (validée le 2026-11-16)
+# Architecture
 
 ## Principes
 
-1. **Un seul bundle** `mixins/horizon_essentials/`, mod id `horizon_essentials`, plusieurs `[[module]]`.
-   Les bundles mixin n'ont pas de système de dépendances : un Core dans un autre bundle casserait la compilation s'il manquait.
-2. **Modules = Rust pur** (aucun type du jeu) ; **helpers = colle** de 5 à 15 lignes : lire le jeu, appeler un module, dessiner.
-   Les modules se testent donc avec `cargo test`, sans Horizon.
-3. **Un helper par hook**, qui distribue aux widgets (ordre maîtrisé, une seule injection par hook).
-4. **Aucune lecture disque pendant une frame** ; écriture différée au tick, atomique.
-5. **Zéro allocation par frame** quand rien ne change : formes et largeurs de texte en cache, buffers circulaires de taille fixe.
-6. Le code interne non stable (`scale_since`, `process_memory`) n'est appelé que dans **un** helper chacun, avec repli.
+1. **Un seul bundle** `mixins/horizon_essentials/`, mod id `horizon_essentials`, plusieurs `[[module]]`
+   (visibilité `pub`, donc pas d'avertissement « code mort » pour ce que le jeu n'appelle pas encore).
+   Les bundles mixin n'ont pas de système de dépendances : un Core dans un autre bundle casserait la
+   compilation s'il manquait.
+2. **Modules = Rust pur** (aucun type du jeu) ; **helpers = colle** de 5 à 40 lignes : lire le jeu,
+   appeler le Core, peindre. Les modules se testent avec `cargo test`, sans Horizon.
+3. **Un helper par hook**, qui passe par `essentials_events` (ordre maîtrisé, une injection par hook).
+4. **L'interface ne modifie rien elle-même** : elle produit des `Action`, que seul le Core applique.
+5. **Le thread du jeu ne touche jamais le disque** : chargement et sauvegarde passent par le thread
+   « Essentials I/O ».
+6. **Zéro allocation par frame** en régime établi ; un module désactivé n'est jamais appelé.
+7. Fichiers préfixés plutôt qu'en sous-dossiers (le format des bundles interdit `mod` et `include!`) :
+   `core_` (Core), `ui_` (interface), `mod_` (modules), `profiles_` (profils), `h_` (helpers).
 
-## Modules
+## Fichiers
 
 | Fichier | Module dans le jeu | Rôle |
 |---|---|---|
-| `core.rs` | `crate::game::essentials_core` | état global, répartition des événements, commande, sauvegarde différée |
-| `config.rs` | `essentials_config` | modèle serde, défauts, bornes, migration, repli si corrompu |
-| `profiles.rs` | `essentials_profiles` | 4 préréglages, changement de profil, copie vers Personnalisé |
-| `draw.rs` | `essentials_draw` | `Shape`, cache, layout (ancre + fractions), opacité |
-| `fps.rs` | `essentials_fps` | temps de frame : min, max, moyenne, 1 % low, graphe |
-| `cps.rs` | `essentials_cps` | horodatage des clics : actuel, pic, moyenne, historique |
-| `keystrokes.rs` | `essentials_keystrokes` | WASD, espace, Shift, clics, CPS ; styles par touche |
-| `memory.rs` | `essentials_memory` | formatage mémoire, échantillonnage 1×/s |
-| `editor.rs` | `essentials_editor` | éditeur : sélection, glisser, molette, reset |
+| `core_types.rs` | `crate::game::essentials_types` | constantes, ancres, `Action`, `Shapes` (formes réutilisées), trait `Module` |
+| `core_registry.rs` | `essentials_registry` | `ModuleId`, table `MODULES`, `Modules` + `get_mut` (seule porte vers un module) |
+| `core_config.rs` | `essentials_config` | modèle versionné, lecture résiliente champ par champ, `Resolved` pour le rendu |
+| `core_store.rs` | `essentials_store` | fichiers (`active`, `profiles/<nom>.json`), écriture atomique, `.bak`, thread d'E/S |
+| `core_state.rs` | `essentials_state` | état unique par thread, chargement asynchrone, sauvegarde différée, fermeture |
+| `core_events.rs` | `essentials_events` | frame / tick / key / apply / hud / shutdown : la seule porte des helpers |
+| `ui_draw.rs` | `essentials_draw` | placement automatique (ancres) ou libre (fractions de la place libre) |
+| `mod_status.rs` | `essentials_status` | module témoin |
+| `h_list.rs` | hook `native_mods` | ligne dans Options > Mods |
+| `h_frame.rs` | hook `native_frame` | temps qui passe, réponses du thread d'E/S |
+| `h_tick.rs` | hook `native_tick` | modules, messages du Core dans le chat |
+| `h_key.rs` | hook `native_key` | touches et boutons de souris |
+| `h_hud.rs` | hook `native_hud` | dessin des widgets (coins via les `Corners` de Horizon) |
+| `h_stopping.rs` | hook `native_client_stopping` | dernier changement écrit à la fermeture |
+
+## Ajouter un module
+
+1. Écrire `mod_<nom>.rs` (implémente `Module`), l'ajouter à `horizon-mixin.toml` et à `harness/lib.rs`.
+2. Dans `core_registry.rs` uniquement : une variante de `ModuleId`, une ligne de `MODULES`, un champ de
+   `Modules` et une branche de `get_mut`.
+
+La configuration (réglages par défaut), l'activation, le HUD et l'interface le prennent en compte seuls.
 
 ## Flux
 
 ```
-native_frame ─► core.on_frame(dt) ─► fps
-native_key   ─► core.on_key       ─► cps / keystrokes / touche éditeur
-native_tick  ─► core.on_tick      ─► memory (1×/s), sauvegarde si modifié depuis ≥ 1 s
-native_hud   ─► core.draw         ─► widget sale ? reconstruire : réutiliser ─► helper peint
-Options>Mods ─► list / settings / click ─► config ─► « à sauvegarder »
-Éditeur      ─► screen_* ─► editor ─► config.layout
+native_frame ─► events::frame ─► état : réponses d'E/S, sauvegarde différée ─► modules actifs
+native_tick  ─► events::tick  ─► modules actifs ; un message du Core vers le chat
+native_key   ─► events::key   ─► modules actifs
+native_hud   ─► events::hud   ─► widget actif : formes en cache ou reconstruites ─► helper peint
+interface    ─► Action ─► events::apply ─► config modifiée ─► Resolved recalculé, sauvegarde dans 1 s
+fermeture    ─► events::shutdown ─► dernier changement envoyé, thread d'E/S attendu (2 s max)
 ```
 
 ## Configuration
 
-`horizon-mods/.horizon-mod-data/horizon_essentials/` :
+Dans le dossier de l'instance (jamais dans celui d'une version : survit aux recompilations et mises à jour) :
 
 ```
-active                       nom du profil actif
-profiles/pvp.json survival.json minimal.json custom.json
+horizon-mods/.horizon-mod-data/horizon_essentials/
+  active                     nom du profil actif
+  profiles/<nom>.json        un profil
+  profiles/<nom>.json.bak    copie d'un fichier qui était invalide
 ```
 
-JSON versionné (`"version": 1`), positions en fractions de la place libre, taille 50–200 %.
+```json
+{ "version": 1,
+  "modules": { "status": {
+      "on": true,
+      "layout": { "anchor": "top_right", "auto": true, "x": 0.0, "y": 0.0, "scale": 100 },
+      "style":  { "background": 47, "text": "FFFFFF", "shadow": true } } } }
+```
+
+- Lecture résiliente : fichier illisible → valeurs par défaut ; champ invalide → seul ce champ prend sa
+  valeur par défaut ; module inconnu → conservé ; module absent → ajouté ; un avertissement dans le chat.
+- Écriture atomique (fichier temporaire puis renommage), 1 s après le dernier changement, par le thread
+  d'E/S ; une demande arrivée pendant une écriture n'est jamais perdue.
 
 ## Ordre de développement
 
-0. Environnement + compilation du mod officiel `fps-overlay` inchangé (porte d'entrée)
-1. Core + config  2. Draw  3. FPS  4. CPS  5. Keystrokes  6. Memory  7. Profils  8. Éditeur  9. Mesures, docs, paquet
-
-Chaque étape : `cargo test` ✔, `native.py check` ✔, contrôle en jeu (F1, F3, solo, serveur, mod coupé), FPS avec/sans.
+Étape 1 (Core) : 1 structure ✅, 2 types/registre/config ✅, 3 stockage/état ✅, 4 événements/rendu/témoin ✅,
+optimisation E/S (branche `perf/io-thread`), 5 gestion des modules (Options > Mods, `/essentials`).
+Puis : menu Échap, HUD Editor, profils, modules PvP.
