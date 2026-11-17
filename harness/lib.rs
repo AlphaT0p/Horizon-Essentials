@@ -30,6 +30,9 @@ pub mod game {
     pub mod essentials_command;
 }
 
+#[cfg(test)]
+mod integration;
+
 /// Le nombre d'allocations faites par le thread courant depuis son début.
 #[cfg(test)]
 pub fn allocations() -> u64 {
