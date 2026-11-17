@@ -1,0 +1,18 @@
+[package]
+name = "horizon-essentials"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+publish = false
+description = "Horizon Essentials: banc de test des modules du bundle (cargo test), sans compiler Horizon."
+
+# Les modules du bundle sont du Rust pur : ce crate les assemble sous `crate::game::*`,
+# exactement comme le jeu les voit, pour les tester sur l'ordinateur.
+[lib]
+path = "harness/lib.rs"
+
+# Les mêmes versions que le Cargo.lock de Horizon 9f42064 : dans le jeu, ces crates sont
+# déjà des dépendances de horizon-client, le bundle n'en ajoute aucune.
+[dependencies]
+serde = { version = "=1.0.229", features = ["derive"] }
+serde_json = "=1.0.151"
