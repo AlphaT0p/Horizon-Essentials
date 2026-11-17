@@ -6,7 +6,8 @@
 //   3. ajouter son champ à `Modules` et une branche à `Modules::get_mut` (dans ce même fichier).
 // Le reste du Core, le menu, la configuration et les profils le prennent en compte seuls.
 
-use crate::game::essentials_types::Anchor;
+use crate::game::essentials_status::Status;
+use crate::game::essentials_types::{Anchor, Module};
 
 /// Un module connu. L'ordre des variantes est l'ordre de `MODULES`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -61,6 +62,21 @@ impl ModuleId {
     /// Tous les modules, dans l'ordre du registre.
     pub fn all() -> impl Iterator<Item = ModuleId> {
         MODULES.iter().map(|d| d.id)
+    }
+}
+
+/// L'état de chaque module, un champ par module.
+#[derive(Debug, Default)]
+pub struct Modules {
+    pub status: Status,
+}
+
+impl Modules {
+    /// Le module `id`, par son interface commune : une référence, sans allocation.
+    pub fn get_mut(&mut self, id: ModuleId) -> &mut dyn Module {
+        match id {
+            ModuleId::Status => &mut self.status,
+        }
     }
 }
 

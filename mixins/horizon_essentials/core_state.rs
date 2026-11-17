@@ -12,6 +12,7 @@ use std::collections::VecDeque;
 use std::path::{Path, PathBuf};
 
 use crate::game::essentials_config::{Config, Resolved};
+use crate::game::essentials_registry::{ModuleId, Modules};
 use crate::game::essentials_store::{self as store, SaveTimer};
 use crate::game::essentials_types::Action;
 
@@ -30,6 +31,10 @@ pub struct State {
     pub timer: SaveTimer,
     /// Les messages à montrer dans le chat, dès que le joueur est dans un monde.
     pub messages: VecDeque<String>,
+    /// L'état de chaque module.
+    pub modules: Modules,
+    /// Les ticks vus depuis le chargement.
+    pub tick: u64,
 }
 
 impl State {
@@ -43,6 +48,8 @@ impl State {
             revision: 0,
             timer: SaveTimer::default(),
             messages: VecDeque::new(),
+            modules: Modules::default(),
+            tick: 0,
         };
         for w in loaded.warnings {
             state.say(w);
@@ -86,8 +93,16 @@ impl State {
     }
 
     fn changed(&mut self) {
+        let before = self.resolved.on;
         self.resolved = self.config.resolve();
         self.revision += 1;
+        // Prévient chaque module dont l'activation a changé.
+        for id in ModuleId::all() {
+            let on = self.resolved.on[id.index()];
+            if on != before[id.index()] {
+                self.modules.get_mut(id).on_enabled(on);
+            }
+        }
     }
 
     /// Le temps passe : sauvegarde quand la configuration n'a plus bougé depuis une seconde.

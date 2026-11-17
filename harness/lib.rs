@@ -18,4 +18,10 @@ pub mod game {
     pub mod essentials_store;
     #[path = "../../mixins/horizon_essentials/core_state.rs"]
     pub mod essentials_state;
+    #[path = "../../mixins/horizon_essentials/core_events.rs"]
+    pub mod essentials_events;
+    #[path = "../../mixins/horizon_essentials/ui_draw.rs"]
+    pub mod essentials_draw;
+    #[path = "../../mixins/horizon_essentials/mod_status.rs"]
+    pub mod essentials_status;
 }

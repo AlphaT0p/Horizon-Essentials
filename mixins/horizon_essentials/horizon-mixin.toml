@@ -45,7 +45,69 @@ name = "essentials_state"
 visibility = "pub"
 source = "core_state.rs"
 
+[[module]]
+id = "events"
+file = "crates/horizon-client/src/game.rs"
+name = "essentials_events"
+visibility = "pub"
+source = "core_events.rs"
+
+[[module]]
+id = "draw"
+file = "crates/horizon-client/src/game.rs"
+name = "essentials_draw"
+visibility = "pub"
+source = "ui_draw.rs"
+
+[[module]]
+id = "status"
+file = "crates/horizon-client/src/game.rs"
+name = "essentials_status"
+visibility = "pub"
+source = "mod_status.rs"
+
 # ── Helpers (un par hook) ───────────────────────────────────────────────────
+[[injection]]
+id = "frame"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_frame"
+helper = "h_frame.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "elapsed", ty = "std::time::Duration", value = "elapsed" },
+]
+
+[[injection]]
+id = "tick"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_tick"
+helper = "h_tick.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+]
+
+[[injection]]
+id = "key"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_key"
+helper = "h_key.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "key", ty = "&str", value = "key" },
+  { name = "pressed", ty = "bool", value = "pressed" },
+]
+
+[[injection]]
+id = "hud"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_hud"
+helper = "h_hud.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "batch", ty = "&mut horizon_client::hud::HudBatch", value = "&mut *batch" },
+  { name = "corners", ty = "&mut horizon_client::extras_hud::Corners", value = "&mut *corners" },
+]
+
 [[injection]]
 id = "list"
 kind = "HEAD"
