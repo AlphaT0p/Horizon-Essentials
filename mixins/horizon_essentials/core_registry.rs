@@ -74,10 +74,28 @@ pub struct Modules {
 impl Modules {
     /// Le module `id`, par son interface commune : une référence, sans allocation.
     pub fn get_mut(&mut self, id: ModuleId) -> &mut dyn Module {
+        #[cfg(test)]
+        CALLS.with(|c| {
+            let mut counts = c.get();
+            counts[id.index()] += 1;
+            c.set(counts);
+        });
         match id {
             ModuleId::Status => &mut self.status,
         }
     }
+}
+
+// Tests : combien de fois chaque module a été appelé sur ce thread. `get_mut` est
+// la seule porte vers un module, donc ce compteur voit tous les appels.
+#[cfg(test)]
+thread_local! {
+    static CALLS: std::cell::Cell<[u64; COUNT]> = const { std::cell::Cell::new([0; COUNT]) };
+}
+
+#[cfg(test)]
+pub fn calls(id: ModuleId) -> u64 {
+    CALLS.with(|c| c.get()[id.index()])
 }
 
 #[cfg(test)]

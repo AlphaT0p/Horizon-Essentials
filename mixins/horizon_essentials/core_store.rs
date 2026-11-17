@@ -13,7 +13,11 @@
 
 use std::fs;
 use std::io;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 use crate::game::essentials_config::Config;
 
@@ -42,6 +46,7 @@ pub fn profile_path(dir: &Path, profile: &str) -> PathBuf {
 
 /// Lit le profil actif. Ne panique jamais et renvoie toujours une configuration valide.
 pub fn load(dir: &Path) -> Loaded {
+    count_disk_op();
     let mut warnings = Vec::new();
     let profile = match fs::read_to_string(dir.join("active")) {
         Ok(text) => {
@@ -80,7 +85,13 @@ pub fn load(dir: &Path) -> Loaded {
 
 /// Écrit le profil, et `active` s'il a changé.
 pub fn save(dir: &Path, profile: &str, config: &Config) -> io::Result<()> {
-    write_atomic(&profile_path(dir, profile), config.to_json().as_bytes())?;
+    save_json(dir, profile, &config.to_json())
+}
+
+/// Comme `save`, avec le JSON déjà préparé (par le thread du jeu).
+pub fn save_json(dir: &Path, profile: &str, json: &str) -> io::Result<()> {
+    count_disk_op();
+    write_atomic(&profile_path(dir, profile), json.as_bytes())?;
     let active = dir.join("active");
     if fs::read_to_string(&active).map(|a| a.trim() != profile).unwrap_or(true) {
         write_atomic(&active, profile.as_bytes())?;
@@ -134,6 +145,163 @@ impl SaveTimer {
         self.pending
     }
 }
+
+// ── Thread d'entrées-sorties ────────────────────────────────────────────────
+//
+// Le disque n'est jamais touché par le thread du jeu (rendu) : il envoie des
+// demandes au thread « Essentials I/O » par un canal et relit les réponses sans
+// attendre. Rien n'est partagé : chaque demande porte ses données par valeur.
+//
+// - Une demande arrivée pendant une écriture attend dans le canal : elle n'est
+//   jamais perdue.
+// - Plusieurs sauvegardes en attente du même profil, sans chargement entre elles,
+//   n'écrivent que la dernière (elle contient toutes les modifications).
+// - Une panique pendant une opération est rattrapée et devient une erreur.
+// - À la fermeture, `finish` termine les écritures en attente (avec un délai maximal).
+
+/// Une demande au thread d'E/S.
+#[derive(Debug)]
+pub enum Request {
+    Load { dir: PathBuf },
+    Save { dir: PathBuf, profile: String, json: String, seq: u64 },
+    Stop,
+}
+
+/// Une réponse du thread d'E/S.
+#[derive(Debug)]
+pub enum Reply {
+    Loaded(Loaded),
+    Saved { seq: u64, error: Option<String> },
+    Stopped,
+}
+
+/// Le côté « jeu » du thread d'E/S.
+#[derive(Debug)]
+pub struct Io {
+    tx: Sender<Request>,
+    rx: Receiver<Reply>,
+    handle: Option<JoinHandle<()>>,
+}
+
+impl Io {
+    /// Démarre le thread. None s'il ne peut pas démarrer : l'appelant travaille alors
+    /// sans thread (comme avant), au lieu de perdre les réglages.
+    pub fn spawn() -> Option<Io> {
+        let (tx, requests) = mpsc::channel();
+        let (replies, rx) = mpsc::channel();
+        let handle = std::thread::Builder::new()
+            .name("Essentials I/O".into())
+            .spawn(move || worker(requests, replies))
+            .ok()?;
+        Some(Io { tx, rx, handle: Some(handle) })
+    }
+
+    /// Envoie une demande. Si le thread n'est plus là, la demande est rendue
+    /// (l'appelant peut alors la traiter lui-même).
+    pub fn send(&self, request: Request) -> Result<(), Request> {
+        self.tx.send(request).map_err(|e| e.0)
+    }
+
+    /// La prochaine réponse arrivée, sans attendre (n'alloue rien si le canal est vide).
+    pub fn try_recv(&self) -> Option<Reply> {
+        self.rx.try_recv().ok()
+    }
+
+    /// Attend une réponse au plus `timeout`.
+    pub fn recv_timeout(&self, timeout: Duration) -> Option<Reply> {
+        self.rx.recv_timeout(timeout).ok()
+    }
+
+    /// Fermeture : demande l'arrêt et rend les réponses arrivées d'ici là (au plus
+    /// `timeout`). Le thread est attendu s'il s'est arrêté à temps ; sinon il est
+    /// laissé finir seul (le processus se termine, l'écriture atomique garantit
+    /// qu'aucun fichier n'est laissé à moitié écrit).
+    pub fn finish(mut self, timeout: Duration) -> Vec<Reply> {
+        let mut replies = Vec::new();
+        if self.send(Request::Stop).is_err() {
+            return replies;
+        }
+        let deadline = Instant::now() + timeout;
+        loop {
+            let left = deadline.saturating_duration_since(Instant::now());
+            match self.rx.recv_timeout(left) {
+                Ok(Reply::Stopped) => {
+                    if let Some(handle) = self.handle.take() {
+                        let _ = handle.join();
+                    }
+                    break;
+                }
+                Ok(reply) => replies.push(reply),
+                Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => break,
+            }
+        }
+        replies
+    }
+}
+
+fn worker(requests: Receiver<Request>, replies: Sender<Reply>) {
+    while let Ok(first) = requests.recv() {
+        let mut batch = vec![first];
+        batch.extend(requests.try_iter());
+        for (i, request) in batch.iter().enumerate() {
+            let reply = match request {
+                Request::Stop => {
+                    let _ = replies.send(Reply::Stopped);
+                    return;
+                }
+                Request::Load { dir } => {
+                    let loaded = catch_unwind(AssertUnwindSafe(|| load(dir))).unwrap_or_else(|_| Loaded {
+                        profile: DEFAULT_PROFILE.to_owned(),
+                        config: Config::default(),
+                        warnings: vec!["erreur interne pendant la lecture : valeurs par défaut".to_owned()],
+                    });
+                    Reply::Loaded(loaded)
+                }
+                Request::Save { dir, profile, json, seq } => {
+                    if superseded(&batch[i + 1..], dir, profile) {
+                        Reply::Saved { seq: *seq, error: None }
+                    } else {
+                        let error = match catch_unwind(AssertUnwindSafe(|| save_json(dir, profile, json))) {
+                            Ok(Ok(())) => None,
+                            Ok(Err(e)) => Some(e.to_string()),
+                            Err(_) => Some("erreur interne pendant l'écriture".to_owned()),
+                        };
+                        Reply::Saved { seq: *seq, error }
+                    }
+                }
+            };
+            if replies.send(reply).is_err() {
+                return;
+            }
+        }
+    }
+}
+
+/// Une sauvegarde plus récente du même profil suit, sans chargement entre les deux.
+fn superseded(later: &[Request], dir: &Path, profile: &str) -> bool {
+    for r in later {
+        match r {
+            Request::Load { .. } | Request::Stop => return false,
+            Request::Save { dir: d, profile: p, .. } if d == dir && p == profile => return true,
+            Request::Save { .. } => {}
+        }
+    }
+    false
+}
+
+// Compte les opérations disque du thread courant, pour les tests (rien en jeu).
+#[cfg(test)]
+thread_local! {
+    pub(crate) static DISK_OPS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+fn count_disk_op() {
+    DISK_OPS.with(|c| c.set(c.get() + 1));
+}
+
+#[cfg(not(test))]
+fn count_disk_op() {}
 
 #[cfg(test)]
 pub(crate) mod tests {
@@ -202,6 +370,51 @@ pub(crate) mod tests {
         assert!(valid_profile_name("pvp_2"));
         assert!(!valid_profile_name(""));
         assert!(!valid_profile_name("Majuscule"));
+    }
+
+    #[test]
+    fn le_thread_d_es_ecrit_la_derniere_version_sans_rien_perdre() {
+        let d = TempDir::new("io-rafale");
+        let io = Io::spawn().expect("thread d'E/S");
+        let mut c = Config::default();
+        for seq in 1..=100 {
+            c.apply(Action::Toggle(ModuleId::Status));
+            let save = Request::Save { dir: d.0.clone(), profile: "default".into(), json: c.to_json(), seq };
+            assert!(io.send(save).is_ok());
+        }
+        // Une lecture après les écritures voit la dernière (ordre conservé).
+        assert!(io.send(Request::Load { dir: d.0.clone() }).is_ok());
+        let replies = io.finish(Duration::from_secs(5));
+        let saved = replies.iter().filter(|r| matches!(r, Reply::Saved { .. })).count();
+        assert_eq!(saved, 100, "chaque demande reçoit sa réponse");
+        assert!(replies.iter().all(|r| !matches!(r, Reply::Saved { error: Some(_), .. })));
+        let Some(Reply::Loaded(l)) = replies.iter().find(|r| matches!(r, Reply::Loaded(_))) else {
+            panic!("pas de lecture");
+        };
+        assert_eq!(l.config, c);
+    }
+
+    #[test]
+    fn une_sauvegarde_n_est_sautee_que_si_une_plus_recente_suit_sans_lecture() {
+        let save = |p: &str| Request::Save { dir: PathBuf::from("d"), profile: p.into(), json: String::new(), seq: 0 };
+        let load = Request::Load { dir: PathBuf::from("d") };
+        let d = Path::new("d");
+        assert!(superseded(&[save("default")], d, "default"));
+        assert!(!superseded(&[save("pvp")], d, "default"), "un autre profil ne remplace rien");
+        assert!(!superseded(&[load, save("default")], d, "default"), "une lecture entre les deux");
+        assert!(!superseded(&[], d, "default"));
+    }
+
+    #[test]
+    fn la_fermeture_attend_les_ecritures() {
+        let d = TempDir::new("io-fermeture");
+        let io = Io::spawn().expect("thread d'E/S");
+        let mut c = Config::default();
+        c.apply(Action::Toggle(ModuleId::Status));
+        let save = Request::Save { dir: d.0.clone(), profile: "default".into(), json: c.to_json(), seq: 1 };
+        assert!(io.send(save).is_ok());
+        io.finish(Duration::from_secs(5));
+        assert_eq!(load(&d.0).config, c, "écrit avant la fin de `finish`");
     }
 
     #[test]

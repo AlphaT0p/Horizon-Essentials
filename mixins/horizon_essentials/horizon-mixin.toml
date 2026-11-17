@@ -98,6 +98,15 @@ bindings = [
 ]
 
 [[injection]]
+id = "stopping"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_client_stopping"
+helper = "h_stopping.rs"
+bindings = [
+  { name = "game", ty = "&crate::game::Game<'_>", value = "&*self" },
+]
+
+[[injection]]
 id = "hud"
 kind = "HEAD"
 target = "horizon_client::game::native_hooks::Game<'_>::native_hud"
