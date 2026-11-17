@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 publish = false
-description = "Horizon Essentials: banc de test des modules du bundle (cargo test), sans compiler Horizon."
+description = "Horizon Essentials: test harness for the bundle modules (cargo test), without compiling Horizon."
 
 # Les modules du bundle sont du Rust pur : ce crate les assemble sous `crate::game::*`,
 # exactement comme le jeu les voit, pour les tester sur l'ordinateur.
