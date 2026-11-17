@@ -6,6 +6,7 @@
 
 use std::path::PathBuf;
 
+use crate::game::essentials_config::Resolved;
 use crate::game::essentials_draw as draw;
 use crate::game::essentials_registry::{COUNT, ModuleId};
 use crate::game::essentials_state::{self as state};
@@ -69,6 +70,25 @@ pub fn shutdown() {
 /// Applique une action venue de l'interface ou d'une commande.
 pub fn apply(dir: impl FnOnce() -> PathBuf, action: Action) -> bool {
     state::with(dir, |s| s.apply(action)).unwrap_or(false)
+}
+
+/// Ce que l'interface peut lire du Core, en lecture seule : la configuration
+/// résolue et le profil actif. La page de réglages et la commande lisent toutes
+/// deux cet instantané : elles montrent toujours le même état.
+#[derive(Clone, Copy, Debug)]
+pub struct Snapshot<'a> {
+    pub resolved: &'a Resolved,
+    pub profile: &'a str,
+}
+
+/// Donne à `f` l'instantané du Core, ou None tant que la configuration est en
+/// cours de chargement (l'interface affiche alors « Chargement… » et ne propose
+/// aucune modification). Le résultat est None si l'état est déjà emprunté.
+pub fn view<R>(dir: impl FnOnce() -> PathBuf, f: impl FnOnce(Option<Snapshot<'_>>) -> R) -> Option<R> {
+    state::with(dir, |s| {
+        let snapshot = s.loaded.then_some(Snapshot { resolved: &s.resolved, profile: &s.profile });
+        f(snapshot)
+    })
 }
 
 /// Dessine les widgets actifs.
@@ -205,6 +225,24 @@ mod tests {
         let m = tick(|| dir.clone(), true).expect("un avertissement");
         assert!(m.contains("profil actif invalide"));
         assert_eq!(tick(|| dir.clone(), true), None);
+    }
+
+    #[test]
+    fn view_ne_donne_rien_pendant_le_chargement() {
+        let d = TempDir::new("evenements-view");
+        let dir = d.0.clone();
+        // Premier accès : la lecture vient d'être demandée au thread d'E/S.
+        let first = view(|| dir.clone(), |snap| snap.is_some()).unwrap();
+        let loaded = state::with_existing(|s| s.loaded).unwrap();
+        assert_eq!(first, loaded, "pas d'instantané tant que la configuration n'est pas lue");
+        state::with_existing(|s| s.wait_idle(WAIT));
+        let (on, profile) = view(|| dir.clone(), |snap| {
+            let snap = snap.expect("chargée");
+            (snap.resolved.on[ModuleId::Status.index()], snap.profile.to_owned())
+        })
+        .unwrap();
+        assert!(on);
+        assert_eq!(profile, "default");
     }
 
     // ── Non-régression des performances ─────────────────────────────────────
