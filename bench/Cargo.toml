@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 publish = false
-description = "Protocole de mesure des performances de Horizon Essentials (hors mode test, comme dans le jeu)."
+description = "Horizon Essentials performance measurement protocol (outside test mode, as in the game)."
 
 # Programme indépendant : cargo run --release --manifest-path bench/Cargo.toml
 [[bin]]

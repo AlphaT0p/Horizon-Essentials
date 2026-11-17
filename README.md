@@ -1,53 +1,55 @@
 # Horizon Essentials
 
-Extension complémentaire pour [Horizon](https://playhorizon.dev) (Minecraft: Java Edition 26.3 réécrit en Rust) :
-un mod natif (`.hnmod`) qui ajoute ce que Horizon n'a pas encore, sans refaire ce qu'il a déjà
-(viseur, Hit Color, armure, effets, ping, éditeur de HUD… sont déjà intégrés à Horizon).
+A companion extension for [Horizon](https://playhorizon.dev) (Minecraft: Java Edition 26.3 rewritten in Rust):
+a native mod (`.hnmod`) that adds what Horizon does not have yet, without redoing what it already has
+(crosshair, Hit Color, armor, effects, ping, HUD editor… are already built into Horizon).
 
-Cible : **Horizon Nightly 2026-11-13 · `9f42064`** (hook points `NATIVE_HOOKS_API = 415`).
+Target: **Horizon Nightly 2026-11-13 · `9f42064`** (hook points `NATIVE_HOOKS_API = 415`).
 
-## Fonctionnalités prévues
+## Planned features
 
-| Fonction | Ce qu'elle ajoute à Horizon | État |
+| Feature | What it adds to Horizon | Status |
 |---|---|---|
-| Essentials Core | Registre de modules, configuration résiliente et persistante, E/S hors du rendu | ✅ |
-| Module témoin | Une boîte qui prouve que le Core tourne | ✅ |
-| Gestion des modules | Page Options > Mods, commande `/essentials` | en cours |
-| Menu Échap | Panneau latéral dessiné sur le menu pause | prévu |
-| HUD Customizer | Placement, taille, couleurs de chaque widget, éditeur glisser-déposer | prévu |
-| HUD Profiles | PvP, Survival, Minimaliste, Personnalisé | prévu |
-| FPS Statistics, CPS History, Advanced Keystrokes, Memory Display | Modules PvP | prévu |
+| Essentials Core | Module registry, resilient and persistent configuration, I/O off the render thread | ✅ |
+| Status module | A small box that proves the Core is running | ✅ |
+| Module management | Options > Mods page, `/essentials` command | in progress |
+| Escape menu | Side panel drawn on the pause menu | planned |
+| HUD Customizer | Position, size and colors of every widget, drag-and-drop editor | planned |
+| HUD Profiles | PvP, Survival, Minimal, Custom | planned |
+| FPS Statistics, CPS History, Advanced Keystrokes, Memory Display | PvP modules | planned |
 
-## Organisation du dépôt
+## Repository layout
 
 ```
-mixins/horizon_essentials/   le mod (un seul bundle horizon-mixins)
-  horizon-mixin.toml           manifeste : modules et hooks
-  core_*.rs                    Essentials Core (types, registre, config, stockage, état, événements)
-  ui_*.rs                      interface (placement, plus tard menu et HUD Editor)
-  mod_*.rs                     modules (un fichier par module)
-  h_*.rs                       helpers : la colle avec les hook points de Horizon, un par hook
-harness/lib.rs               banc de test : `cargo test` sans compiler Horizon
-bench/                       protocole de mesure des performances
-compatibility.json           commit Horizon et horizon-mixins testés
-docs/                        architecture, API vérifiées, environnement, performances
+mixins/horizon_essentials/   the mod (a single horizon-mixins bundle)
+  horizon-mixin.toml           manifest: modules and hooks
+  core_*.rs                    Essentials Core (types, registry, config, storage, state, events)
+  ui_*.rs                      user interface (placement; later the menu and the HUD Editor)
+  mod_*.rs                     modules (one file per module)
+  h_*.rs                       helpers: the glue with Horizon's hook points, one per hook
+harness/lib.rs               test harness: `cargo test` without compiling Horizon
+bench/                       performance measurement protocol
+compatibility.json           tested Horizon and horizon-mixins commits
+docs/                        architecture, verified APIs, environment, performance
 ```
 
-## Compiler et tester
+## Build and test
 
 ```bash
-cargo test                                               # logique (Windows ou Linux), quelques secondes
+cargo test                                               # logic (Windows or Linux), a few seconds
 cargo clippy --all-targets -- -D warnings
-cargo run --release --manifest-path bench/Cargo.toml     # mesures de performance
+cargo run --release --manifest-path bench/Cargo.toml     # performance measurements
 ```
 
-Vérification contre le code de Horizon et build du jeu : voir [docs/environnement.md](docs/environnement.md).
+Checking against Horizon's source and building the game: see [docs/environnement.md](docs/environnement.md).
 
 ## Documentation
 
 - [Architecture](docs/architecture.md)
-- [API Horizon vérifiées](docs/api-verifiee.md)
-- [Environnement de développement](docs/environnement.md)
-- [Performances](docs/performance.md)
+- [Verified Horizon APIs](docs/api-verifiee.md)
+- [Development environment](docs/environnement.md)
+- [Performance](docs/performance.md)
 
-Projet personnel et d'apprentissage, non affilié à Horizon, Mojang ou Microsoft. Licence MIT.
+The in-game text and the code comments are currently in French.
+
+Personal and learning project, not affiliated with Horizon, Mojang or Microsoft. MIT License.
