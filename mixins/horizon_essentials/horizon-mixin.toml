@@ -17,6 +17,20 @@ name = "essentials_types"
 visibility = "pub"
 source = "core_types.rs"
 
+[[module]]
+id = "registry"
+file = "crates/horizon-client/src/game.rs"
+name = "essentials_registry"
+visibility = "pub"
+source = "core_registry.rs"
+
+[[module]]
+id = "config"
+file = "crates/horizon-client/src/game.rs"
+name = "essentials_config"
+visibility = "pub"
+source = "core_config.rs"
+
 # ── Helpers (un par hook) ───────────────────────────────────────────────────
 [[injection]]
 id = "list"
