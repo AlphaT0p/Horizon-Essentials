@@ -10,10 +10,13 @@
 //   /essentials help                 cette aide
 
 use crate::game::essentials_config::Resolved;
+use crate::game::essentials_events::Snapshot;
 use crate::game::essentials_registry::{COUNT, MODULES, ModuleId};
 use crate::game::essentials_types::{Action, VERSION};
 
 pub const NAME: &str = "essentials";
+/// La réponse à toute commande tant que la configuration est en cours de chargement.
+pub const LOADING: &str = "Chargement de la configuration… réessaie dans un instant.";
 
 #[derive(Debug, Default, PartialEq)]
 pub struct Reply {
@@ -27,7 +30,12 @@ pub fn ours(command: &str) -> Option<&str> {
     if rest.is_empty() || rest.starts_with(' ') { Some(rest.trim()) } else { None }
 }
 
-pub fn run(args: &str, resolved: &Resolved, profile: &str) -> Reply {
+/// Exécute la commande sur l'instantané du Core. Pendant le chargement, rien
+/// n'est modifié : la réponse est `LOADING`.
+pub fn run(args: &str, snapshot: Option<Snapshot<'_>>) -> Reply {
+    let Some(Snapshot { resolved, profile }) = snapshot else {
+        return Reply { lines: vec![LOADING.to_owned()], action: None };
+    };
     let mut words = args.split_whitespace();
     let verb = words.next().unwrap_or("");
     let target = words.next();
@@ -103,6 +111,18 @@ mod tests {
         Config::default().resolve()
     }
 
+    fn go(args: &str, profile: &str) -> Reply {
+        let resolved = r();
+        run(args, Some(Snapshot { resolved: &resolved, profile }))
+    }
+
+    #[test]
+    fn pendant_le_chargement_rien_n_est_modifie() {
+        let reply = run("off status", None);
+        assert_eq!(reply.lines, [LOADING]);
+        assert_eq!(reply.action, None);
+    }
+
     #[test]
     fn reconnait_seulement_sa_commande() {
         assert_eq!(ours("essentials"), Some(""));
@@ -113,31 +133,31 @@ mod tests {
 
     #[test]
     fn etat_et_liste() {
-        let reply = run("", &r(), "default");
+        let reply = go("", "default");
         assert_eq!(reply.lines, ["Horizon Essentials 0.1.0 - profil default - 1/1 modules actifs"]);
         assert_eq!(reply.action, None);
-        assert_eq!(run("list", &r(), "default").lines, ["status : ACTIVÉ (Témoin Essentials)"]);
+        assert_eq!(go("list", "default").lines, ["status : ACTIVÉ (Témoin Essentials)"]);
     }
 
     #[test]
     fn actions() {
-        assert_eq!(run("off status", &r(), "d").action, Some(Action::Set(ModuleId::Status, false)));
-        assert_eq!(run("on status", &r(), "d").action, Some(Action::Set(ModuleId::Status, true)));
-        assert_eq!(run("toggle status", &r(), "d").action, Some(Action::Toggle(ModuleId::Status)));
-        assert_eq!(run("reset all", &r(), "d").action, Some(Action::ResetAll));
-        assert_eq!(run("reset status", &r(), "d").action, Some(Action::ResetModule(ModuleId::Status)));
-        assert_eq!(run("reload", &r(), "d").action, Some(Action::Reload));
+        assert_eq!(go("off status", "d").action, Some(Action::Set(ModuleId::Status, false)));
+        assert_eq!(go("on status", "d").action, Some(Action::Set(ModuleId::Status, true)));
+        assert_eq!(go("toggle status", "d").action, Some(Action::Toggle(ModuleId::Status)));
+        assert_eq!(go("reset all", "d").action, Some(Action::ResetAll));
+        assert_eq!(go("reset status", "d").action, Some(Action::ResetModule(ModuleId::Status)));
+        assert_eq!(go("reload", "d").action, Some(Action::Reload));
     }
 
     #[test]
     fn erreurs_sans_action() {
-        let reply = run("off radar", &r(), "d");
+        let reply = go("off radar", "d");
         assert_eq!(reply.action, None);
         assert_eq!(reply.lines, ["Module inconnu : radar (modules : status)"]);
-        let reply = run("danse", &r(), "d");
+        let reply = go("danse", "d");
         assert_eq!(reply.action, None);
         assert_eq!(reply.lines.len(), 4);
-        assert_eq!(run("off", &r(), "d").action, None, "sans module : aide");
+        assert_eq!(go("off", "d").action, None, "sans module : aide");
     }
 
     #[test]

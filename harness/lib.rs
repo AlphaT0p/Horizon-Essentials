@@ -24,6 +24,10 @@ pub mod game {
     pub mod essentials_draw;
     #[path = "../../mixins/horizon_essentials/mod_status.rs"]
     pub mod essentials_status;
+    #[path = "../../mixins/horizon_essentials/ui_settings.rs"]
+    pub mod essentials_settings;
+    #[path = "../../mixins/horizon_essentials/ui_command.rs"]
+    pub mod essentials_command;
 }
 
 /// Le nombre d'allocations faites par le thread courant depuis son début.

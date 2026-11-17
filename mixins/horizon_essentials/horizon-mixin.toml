@@ -66,6 +66,20 @@ name = "essentials_status"
 visibility = "pub"
 source = "mod_status.rs"
 
+[[module]]
+id = "ui_settings"
+file = "crates/horizon-client/src/game.rs"
+name = "essentials_settings"
+visibility = "pub"
+source = "ui_settings.rs"
+
+[[module]]
+id = "ui_command"
+file = "crates/horizon-client/src/game.rs"
+name = "essentials_command"
+visibility = "pub"
+source = "ui_command.rs"
+
 # ── Helpers (un par hook) ───────────────────────────────────────────────────
 [[injection]]
 id = "frame"
@@ -95,6 +109,39 @@ bindings = [
   { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
   { name = "key", ty = "&str", value = "key" },
   { name = "pressed", ty = "bool", value = "pressed" },
+]
+
+[[injection]]
+id = "settings"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_settings"
+helper = "h_settings.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "mod_id", ty = "&str", value = "mod_id" },
+  { name = "buttons", ty = "&mut Vec<String>", value = "&mut *buttons" },
+]
+
+[[injection]]
+id = "click"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_settings_click"
+helper = "h_click.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "mod_id", ty = "&str", value = "mod_id" },
+  { name = "button", ty = "usize", value = "button" },
+]
+
+[[injection]]
+id = "command"
+kind = "HEAD"
+target = "horizon_client::game::native_hooks::Game<'_>::native_command"
+helper = "h_command.rs"
+bindings = [
+  { name = "game", ty = "&mut crate::game::Game<'_>", value = "&mut *self" },
+  { name = "command", ty = "&str", value = "command" },
+  { name = "ran", ty = "&mut bool", value = "&mut *ran" },
 ]
 
 [[injection]]
