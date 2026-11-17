@@ -9,7 +9,7 @@ code terminé et testé automatiquement, build installé, **aucun test en jeu fa
 |---|---|---|
 | `main` | `31e500b` = `origin/main` (GitHub) | Core 1 à 4, optimisation E/S, docs et bench — tout ce qui est poussé |
 | `perf/io-thread` | `31e500b` | Conservée (déjà intégrée à `main` par avance rapide) |
-| **`feat/gestion-modules`** | **`dc8567c`** | **Commit 5, local, non poussé** — c'est ici qu'il faut reprendre |
+| **`feat/gestion-modules`** | **`26595cf`** (ce rapport) ; dernier code : `dc8567c` | **Commit 5, local, non poussé** — c'est ici qu'il faut reprendre |
 
 Stash conservé (ne pas supprimer sans accord) : `stash@{0}` « commit 5 en attente : page de réglages et
 /essentials » — les 5 fichiers d'origine, aussi présents (identiques) dans le commit `18449b3`.
